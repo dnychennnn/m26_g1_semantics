@@ -1,13 +1,12 @@
-"""
-Author:
+"""Interface to sugar beet dataset.
+
+Authors: Yung-Yu Chen, Jan Quakernack
 """
 
-import os
 import numpy as np
 import torch
 from PIL import Image
 from pathlib import Path
-import cv2
 
 from training import load_config, DATA_DIR
 
