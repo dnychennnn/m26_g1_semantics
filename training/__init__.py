@@ -2,6 +2,14 @@
 
 Author: Jan Quakernack
 
+Usage:
+
+    from training import LOGS_DIR
+
+    path_to_my_log_file = LOGS_DIR/'my_log.yaml'
+    with path_to_my_log_file.open('w+') as log_file:
+        # write stuff
+
 Note: This module contains parts, which were written for other student projects
 conducted by the author.
 """
@@ -34,6 +42,7 @@ def load_config(path):
     variable M26_G1_SEMANTICS_CONFIGS_DIR.
 
     Usage:
+
         from training import load_config
         config = load_config('some_config_file.yaml')
         some_parameter_value = config['some_parameter_key']
