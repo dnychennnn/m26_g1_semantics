@@ -60,7 +60,7 @@ def main():
             loss.backward()
             optimizer.step()
 
-            if batch_index==0:#len(data_loader)-1:
+            if batch_index==len(data_loader)-1:
                 # end of epoch, make checkpoint
                 print('Checkpoint.')
                 cp_dir = make_checkpoint(run_name, log_dir, epoch_index, model)
