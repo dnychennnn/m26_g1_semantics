@@ -7,18 +7,19 @@ from torch.optim import lr_scheduler
 from torch.autograd import Variable
 from torchvision import transforms
 from dataloader import SugarBeetDataset
+from utils import intersectionAndUnion, accuracy, visualize
 import time
 
 
 n_class    = 3
 batch_size = 1
-epochs     = 500
+epochs     = 1
 lr         = 1e-4
 momentum   = 0
 w_decay    = 1e-5
 step_size  = 50
 gamma      = 0.5
-num_workers = 4 # if on vscode set to 0
+num_workers = 0 # if on vscode set to 0
 configs    = "FCNs-BCEWithLogits_batch{}_epoch{}_RMSprop_scheduler-step{}-gamma{}_lr{}_momentum{}_w_decay{}".format(batch_size, epochs, step_size, gamma, lr, momentum, w_decay)
 print("Configs:", configs)
 
@@ -46,7 +47,7 @@ def main():
 
     # define training and validation data loaders
     data_loader = torch.utils.data.DataLoader(
-        dataset, batch_size=1, shuffle=True, num_workers=num_workers)
+        dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
     data_loader_test = torch.utils.data.DataLoader(
         dataset_test, batch_size=1, shuffle=False, num_workers=num_workers)
@@ -64,28 +65,43 @@ def main():
 
     criterion = nn.BCEWithLogitsLoss()
     
-    
 
-    # let's train it for 10 epochs
-    num_epochs = 10
-
-    for epoch in range(num_epochs):
-
+    for epoch in range(epochs):
+        min_loss = 1.
         # train for one epoch, printing every 10 iterations
-        for inputs, targets in data_loader:
+        for iter, batch in enumerate(data_loader):
+            inputs, targets = batch
+            
             optimizer.zero_grad()
-            inputs = inputs.to(device)      
+            inputs = inputs.to(device) 
             outputs = model(inputs)
             
             loss = criterion(outputs, targets["masks"])
-            print("loss:", loss)
+                
+            if loss.item() < min_loss:
+                min_loss = loss.item()
+                # torch.save(model.state_dict(), "ckpts/{}".format())
+
+            if iter % 10 == 0:
+                print("epochs:", epoch, "iterations:", iter, "loss:", loss.item())
+
             loss.backward()
             optimizer.step()
-        
+ 
         # update the learning rate
         scheduler.step()
 
 
+
+        # evaluation    
+        # TODO    
+        # for iter, batch in enumerate(data_loader_test):
+        #     inputs, targets = batch
+        #     inputs = inputs.to(device)
+            
+        #     with torch.no_grad():
+        #         outputs = model(inputs)
+                
 
 if __name__ == "__main__":
     main()

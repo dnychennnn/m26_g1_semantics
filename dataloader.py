@@ -2,6 +2,7 @@ import os
 import numpy as np
 import torch
 from PIL import Image
+from utils import visualize
 
 
 
@@ -36,7 +37,6 @@ class SugarBeetDataset(object):
         # of binary masks
        
         masks = mask == obj_ids[:, None, None]
-
         num_objs = len(obj_ids)
        
         # convert everything into a torch.Tensor
