@@ -1,4 +1,4 @@
-"""Interface to sugar beet dataset.
+"""Interface to datasets.
 
 Authors: Yung-Yu Chen, Jan Quakernack
 """
@@ -15,6 +15,10 @@ from torchvision import transforms
 
 
 class SugarBeetDataset(Dataset):
+    """
+    Usage:
+        dataset = SugarBeetDataset.from_config()
+    """
 
     @classmethod
     def from_config(cls):
