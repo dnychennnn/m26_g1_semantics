@@ -2,4 +2,4 @@ README.html
 dataset/
 pretrain_try.py
 .vscode/*
-**/__pycache__/**
+**/__pycache__/**/*
