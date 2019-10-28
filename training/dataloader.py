@@ -158,17 +158,18 @@ class SugarBeetDataset(Dataset):
         input_tensor = torch.cat([rgb_tensor, nir_tensor], dim=0)
 
         # convert targets to tensors
-        semantic_target_tensor = torch.from_numpy(semantic_target[None, ...]) # shape (1, target_height, target_width,)
+        semantic_target_tensor = torch.from_numpy(semantic_target) # shape (target_height, target_width,)
 
         return input_tensor, semantic_target_tensor
 
 
     def _make_semantic_target(self, semantic_label):
-        """Map weed and sugar beet to different classes, treat others as background.
+        """Remap class labels.
         """
         semantic_target = np.zeros_like(semantic_label)
-        semantic_target[np.where(semantic_label)==self.label_weed] = 1
-        semantic_target[np.where(semantic_label)==self.label_sugar_beet] = 2
+        semantic_target[np.where(semantic_label)==self.label_ignore] = 1
+        semantic_target[np.where(semantic_label)==self.label_weed] = 2
+        semantic_target[np.where(semantic_label)==self.label_sugar_beet] = 3
         return semantic_target
 
 
