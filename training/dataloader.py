@@ -171,9 +171,10 @@ class SugarBeetDataset(Dataset):
         """Remap class labels.
         """
         semantic_target = np.zeros_like(semantic_label)
-        semantic_target[np.where(semantic_label)==self.label_ignore] = 1
-        semantic_target[np.where(semantic_label)==self.label_weed] = 2
-        semantic_target[np.where(semantic_label)==self.label_sugar_beet] = 3
+        # semantic_target = np.where(semantic_label==self.label_ignore, 1, semantic_target)
+        semantic_target = np.where(semantic_label==self.label_weed, 1, semantic_target)
+        semantic_target = np.where(semantic_label==self.label_sugar_beet, 2, semantic_target)
+
         return semantic_target
 
 
