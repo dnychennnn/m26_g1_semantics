@@ -9,6 +9,7 @@ from torchvision import transforms
 from dataloader import SugarBeetDataset
 from utils import intersectionAndUnion, accuracy, visualize
 import time
+import cv2
 
 
 n_class    = 3
@@ -40,6 +41,44 @@ def main():
 
     # use our dataset and defined transformations
     dataset = SugarBeetDataset.from_config()
+
+    """ MODEL TESTING SNIPPET"""
+    test_input, test_target = dataset[0]
+    test_input = test_input[None, ...].to(device)
+    test_target = test_target[None, ...].to(device)
+
+    model = FCN(n_class=num_classes)
+    model.to(device)
+
+    criterion = nn.CrossEntropyLoss(ignore_index=1).to(device)
+    optimizer = optim.RMSprop(model.parameters(), lr=lr, momentum=momentum, weight_decay=w_decay)
+
+    for i in range(500):
+        optimizer.zero_grad()
+        model.train()
+
+        test_output = model(test_input)
+        loss = criterion(test_output, test_target)
+
+        print('Loss {}'.format(loss.item()))
+
+        loss.backward()
+        optimizer.step()
+        class_confidences = nn.functional.softmax(test_output, dim=1)
+
+        cv_input = test_input.cpu().detach().numpy()[0].transpose(1, 2, 0)
+        cv_sugar_beet_confidence = class_confidences.detach().numpy()[0, 2, ...]
+
+        # print(cv_input.shape)
+        # print(cv_sugar_beet_confidence.shape)
+        
+        if i%25==0:
+            cv2.imshow('input', cv_input)
+            cv2.imshow('sugar beet', cv_sugar_beet_confidence)
+            cv2.waitKey()
+
+    exit()
+
 
     # split the dataset in train and test set
     indices = torch.randperm(len(dataset)).tolist()
