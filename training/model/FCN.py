@@ -26,7 +26,7 @@ class FCN(nn.Module):
 
         # encoder
         # conv1
-        self.conv1_1 = nn.Conv2d(3, 64, 3, padding=100)
+        self.conv1_1 = nn.Conv2d(4, 64, 3, padding=100)
         self.relu1_1 = nn.ReLU(inplace=True)
         self.conv1_2 = nn.Conv2d(64, 64, 3, padding=1)
         self.relu1_2 = nn.ReLU(inplace=True)
@@ -67,7 +67,7 @@ class FCN(nn.Module):
         self.pool5 = nn.MaxPool2d(2, stride=2, ceil_mode=True)  # 1/32
 
         # decoder
-       
+
         # fc6
         self.fc6 = nn.Conv2d(512, 4096, 7)
         self.relu6 = nn.ReLU(inplace=True)
