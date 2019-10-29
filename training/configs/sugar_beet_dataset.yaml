@@ -9,6 +9,15 @@ input_width: 432
 target_height: 322
 target_width: 432
 
+# normalization parameters
+mean_rgb: [0.3855186419211486, 0.22667925089614235, 0.053568861512275835]
+mean_nir: 0.22021524472007756
+std_rgb: [0.12405956089564812, 0.07152223154313433, 0.010760791977355064]
+std_nir: 0.06568905699414836
+
+# stem target
+# keypoint_radius: 15 # in target pixels
+
 path_to_rgb_images: 'sugar_beet_dataset/images/rgb/'
 suffix_rgb_images: '.png'
 
