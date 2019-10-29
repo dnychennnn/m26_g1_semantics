@@ -89,7 +89,7 @@ class FCN(nn.Module):
         self.upscore_pool4 = nn.ConvTranspose2d(
             n_class, n_class, 4, stride=2, bias=False)
 
-        self._initialize_weights()
+        # self._initialize_weights()
 
     def _initialize_weights(self):
         for m in self.modules():

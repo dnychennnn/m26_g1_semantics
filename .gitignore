@@ -1,5 +1,5 @@
 README.html
-dataset/
+training/dataset/
 pretrain_try.py
 **/.vscode/**/*
 **/__pycache__/**/*
