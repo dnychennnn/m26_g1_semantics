@@ -10,6 +10,7 @@ from dataloader import SugarBeetDataset
 from utils import intersectionAndUnion, accuracy, visualize
 import time
 import cv2
+import numpy as np
 
 
 n_class    = 3
@@ -34,7 +35,7 @@ _transform = transforms.ToTensor()
 def main():
     # train on the GPU or on the CPU, if a GPU is not available
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    device = 'cpu'
+    # device = 'cpu'
 
     # our dataset has three classes only - background, weed and crop
     num_classes = 3
@@ -50,10 +51,10 @@ def main():
     model = FCN(n_class=num_classes)
     model.to(device)
 
-    criterion = nn.CrossEntropyLoss(ignore_index=1).to(device)
+    criterion = nn.CrossEntropyLoss().to(device)
     optimizer = optim.RMSprop(model.parameters(), lr=lr, momentum=momentum, weight_decay=w_decay)
 
-    for i in range(500):
+    for i in range(50000):
         optimizer.zero_grad()
         model.train()
 
@@ -64,18 +65,32 @@ def main():
 
         loss.backward()
         optimizer.step()
-        class_confidences = nn.functional.softmax(test_output, dim=1)
 
-        cv_input = test_input.cpu().detach().numpy()[0].transpose(1, 2, 0)
-        cv_sugar_beet_confidence = class_confidences.detach().numpy()[0, 2, ...]
+        if i%50==0:
 
-        # print(cv_input.shape)
-        # print(cv_sugar_beet_confidence.shape)
-        
-        if i%25==0:
+            class_confidences = nn.functional.softmax(test_output, dim=1)
+
+            cv_input = test_input.cpu().detach().numpy()[0].transpose(1, 2, 0)
+            cv_sugar_beet_confidence = class_confidences.cpu().detach().numpy()[0, 2, ...]
+
+            min_confidence = np.min(cv_sugar_beet_confidence)
+            max_confidence = np.max(cv_sugar_beet_confidence)
+            print('confidence min, max =', min_confidence, max_confidence)
+
+            cv_sugar_beet_confidence = (255.0*(cv_sugar_beet_confidence-min_confidence/(max_confidence-min_confidence+0.0001))).astype(np.uint8)
+            cv_target = test_target.cpu().detach().numpy()
+            cv_target_sugar_beet = (255*(cv_target[0, ...]==2)).astype(np.uint8)
+            # cv_target_sugar_beet = 50*(cv_target.transpose(1, 2, 0)).astype(np.uint8)
+
+            print('target max =', np.max(cv_target))
+
+            # print(cv_input.shape)
+            # print(cv_sugar_beet_confidence.shape)
+
+            cv2.imshow('taget sugar beet', cv_target_sugar_beet)
             cv2.imshow('input', cv_input)
             cv2.imshow('sugar beet', cv_sugar_beet_confidence)
-            cv2.waitKey()
+            cv2.waitKey(1)
 
     exit()
 
