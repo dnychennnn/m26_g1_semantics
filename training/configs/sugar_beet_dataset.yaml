@@ -1,0 +1,23 @@
+label_background: 0
+label_ignore: 1
+label_weed: 20001
+label_sugar_beet: 10000
+
+input_height: 322
+input_width: 432
+
+target_height: 322
+target_width: 432
+
+path_to_rgb_images: 'sugar_beet_dataset/images/rgb/'
+suffix_rgb_images: '.png'
+
+path_to_nir_images: 'sugar_beet_dataset/images/nir/'
+suffix_nir_images: '.png'
+
+path_to_semantic_labels: 'sugar_beet_dataset/annotations/PNG/pixelwise/iMap/'
+suffix_semantic_labels: '_GroundTruth_iMap.png'
+
+path_to_stem_labels: 'sugar_beet_dataset/annotations/YAML/'
+suffix_stem_labels: '.yaml'
+
