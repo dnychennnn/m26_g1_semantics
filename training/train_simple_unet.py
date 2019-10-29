@@ -33,7 +33,7 @@ def main():
     model = SimpleUnet.from_config().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-    semantic_loss_function = nn.CrossEntropyLoss(ignore_index=1, weight=torch.Tensor([0.05, 0.3, 0.65])).to(device)
+    semantic_loss_function = nn.CrossEntropyLoss(ignore_index=1, weight=torch.Tensor([0.9, 0.05, 0.05])).to(device)
 
     now = datetime.datetime.now()
     run_time_string = now.strftime('%b_%d_%Y_%Hh%M')
@@ -60,7 +60,7 @@ def main():
             loss.backward()
             optimizer.step()
 
-            if batch_index==0: # len(data_loader)-1:
+            if batch_index==len(data_loader)-1:
                 # end of epoch, make checkpoint
                 print('Checkpoint.')
                 cp_dir = make_checkpoint(run_name, log_dir, epoch_index, model)
@@ -102,8 +102,8 @@ def make_image(input_slice, semantic_slice):
     weed_confidence = semantic_slice[1, ...][..., None]
     sugar_beet_confidence = semantic_slice[2, ...][..., None]
 
-    image = np.where(weed_confidence>0.5, weed_color, image)
-    image = np.where(sugar_beet_confidence>0.5, sugar_beet_color, image)
+    image = np.where(weed_confidence>0.3, weed_color, image)
+    image = np.where(sugar_beet_confidence>0.3, sugar_beet_color, image)
 
     # cv2.imshow('image', image)
     # cv2.waitKey()
