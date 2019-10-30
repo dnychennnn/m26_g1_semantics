@@ -3,16 +3,16 @@
 Authors: Yung-Yu Chen, Jan Quakernack
 """
 
-import numpy as np
 import torch
+from torch.utils.data import Dataset
+from torchvision import transforms
+import numpy as np
+import cv2
 from PIL import Image
-from utils import visualize
+import yaml
 from pathlib import Path
 
 from training import load_config, DATA_DIR
-
-from torch.utils.data import Dataset
-from torchvision import transforms
 
 
 class SugarBeetDataset(Dataset):
@@ -30,6 +30,8 @@ class SugarBeetDataset(Dataset):
     def __init__(self,
                  label_background, label_ignore, label_weed, label_sugar_beet,
                  input_height, input_width, target_height, target_width,
+                 mean_rgb, mean_nir, std_rgb, std_nir,
+                 keypoint_radius,
                  path_to_rgb_images, suffix_rgb_images,
                  path_to_nir_images, suffix_nir_images,
                  path_to_semantic_labels, suffix_semantic_labels,
@@ -37,6 +39,8 @@ class SugarBeetDataset(Dataset):
         """Constructor.
 
         Args:
+            mean_xxx, std_xxx: For normalization of intensity values.
+            keypoint_radius: Size of stem keypoint given as pixels in target.
             path_to_xxx (str), suffix_xxx (str): Where to find files and suffix
             specific for these files, e.g. 'annotations/dlp/iMapCleaned/',
             '_GroundTruthg_iMap.png'.
@@ -47,6 +51,8 @@ class SugarBeetDataset(Dataset):
         self.label_ignore = label_ignore
         self.label_weed = label_weed
         self.label_sugar_beet = label_sugar_beet
+
+        self.keypoint_radius = keypoint_radius
 
         self.path_to_rgb_images = SugarBeetDataset._assure_is_absolute_data_path(Path(path_to_rgb_images))
         self.suffix_rgb_images = suffix_rgb_images
@@ -61,8 +67,15 @@ class SugarBeetDataset(Dataset):
         self.suffix_stem_labels = suffix_stem_labels
 
         # transformations
+        self.input_height = input_height
+        self.input_width = input_width
+        self.target_height = target_height
+        self.target_width = target_width
         self.resize_input = transforms.Resize((input_height, input_width), interpolation=Image.BILINEAR)
         self.resize_target = transforms.Resize((target_height, target_width), interpolation=Image.NEAREST)
+
+        self.rgb_normalization = transforms.Normalize(mean=mean_rgb, std=std_rgb, inplace=True)
+        self.nir_normalization = transforms.Normalize(mean=(mean_nir,), std=(std_nir,), inplace=True)
 
         # TODO random transformations for data augmentation
 
@@ -134,6 +147,10 @@ class SugarBeetDataset(Dataset):
         rgb_image = Image.open(self.get_path_to_rgb_image(filename)).convert('RGB')
         nir_image = Image.open(self.get_path_to_nir_image(filename)).convert('L')
 
+        original_height, original_width = np.array(rgb_image).shape[:2]
+        target_scale_factor_x = self.target_width/original_width
+        target_scale_factor_y = self.target_height/original_height
+
         rgb_image = self.resize_input(rgb_image)
         nir_image = self.resize_input(nir_image)
 
@@ -146,23 +163,31 @@ class SugarBeetDataset(Dataset):
         semantic_target = self._make_semantic_target(semantic_label)
 
         # make stem target
-        # TODO
+        with self.get_path_to_stem_label(filename).open('r') as yaml_file:
+            stem_label = yaml.safe_load(yaml_file)
+
+        stem_target = self._make_stem_target(stem_label,
+                                             target_scale_factor_x=target_scale_factor_x,
+                                             target_scale_factor_y=target_scale_factor_y)
 
         # random transformations
         # TODO keep in mind that we need to be able to transform stem positions (x, y) in the same way
 
-        # normalization
-        # TODO
-
         # convert input images to tensors
         rgb_tensor = self.pil_to_tensor(rgb_image) # shape (3, input_height, input_width,)
         nir_tensor = self.pil_to_tensor(nir_image) # shape (1, input_height, input_width,)
+
+        # normalization
+        rgb_tensor = self.rgb_normalization(rgb_tensor)
+        nir_tensor = self.nir_normalization(nir_tensor)
 
         # concatenate RGB and NIR to single input tensor
         input_tensor = torch.cat([rgb_tensor, nir_tensor], dim=0)
 
         # convert targets to tensors
         semantic_target_tensor = torch.from_numpy(semantic_target) # shape (target_height, target_width,)
+
+        # TODO return stem_target_tensor once implemented
 
         return input_tensor, semantic_target_tensor
 
@@ -171,77 +196,60 @@ class SugarBeetDataset(Dataset):
         """Remap class labels.
         """
         semantic_target = np.zeros_like(semantic_label)
-        # semantic_target = np.where(semantic_label==self.label_ignore, 1, semantic_target)
+        semantic_target = np.where(semantic_label==self.label_ignore, 1, semantic_target)
         semantic_target = np.where(semantic_label==self.label_weed, 1, semantic_target)
         semantic_target = np.where(semantic_label==self.label_sugar_beet, 2, semantic_target)
 
         return semantic_target
 
 
-    def _make_stem_target(self, stem_label):
-        """Construct mask and offset vectors for mixed classification and regression.
+    def _make_stem_target(self, stem_label,
+                          target_scale_factor_x, target_scale_factor_y):
+        """Construct keypoint mask and offset vectors for mixed classification and regression.
         """
-        # TODO
-        pass
+        # get stem positions from dictionary
+        stem_positions = [(annotation['stem']['x']*target_scale_factor_x,
+                           annotation['stem']['y']*target_scale_factor_y)
+                          for annotation in stem_label['annotation']
+                          if (annotation['stem']['x']>=0.0
+                              and annotation['stem']['y']>=0.0)]
+
+        stem_keypoints = np.zeros((self.target_height, self.target_width), dtype=np.int)
+        stem_offset_x = np.zeros((self.target_height, self.target_width), dtype=np.float)
+        stem_offset_y = np.zeros((self.target_height, self.target_width), dtype=np.float)
+
+        for stem_x, stem_y in stem_positions:
+            # put a disk with keypoint_radius at each stem position for classification target
+            keypoint_mask = np.zeros((self.target_height, self.target_width), dtype=np.uint8)
+            keypoint_mask = cv2.circle(keypoint_mask,
+                                       (int(np.round(stem_x)), int(np.round(stem_y))),
+                                       radius=self.keypoint_radius,
+                                       color=255, thickness=-1)
+            keypoint_mask = keypoint_mask>0
+            stem_keypoints = np.where(keypoint_mask, 1, stem_keypoints)
+
+            # compute offset vector for all pixels in mask
+            mask_ys, mask_xs = np.where(keypoint_mask)
+            stem_offset_x[keypoint_mask] = (stem_x-mask_xs)/self.keypoint_radius
+            stem_offset_y[keypoint_mask] = (stem_y-mask_ys)/self.keypoint_radius
+
+            # TODO if two keypoint overlap, take the nearer one to compute offset
+
+        # force all offsets to be in range -1, 1
+        # there may be small deviation due to pixel discretization of keypoint mask
+        stem_offset_x = np.clip(stem_offset_x, -1.0, 1.0)
+        stem_offset_y = np.clip(stem_offset_x, -1.0, 1.0)
+
+        # cv2.imshow('stem_keypoints', (255.0*stem_keypoints).astype(np.uint8))
+        # cv2.imshow('stem_offset_x', stem_offset_x+0.5)
+        # cv2.imshow('stem_offset_y', stem_offset_y+0.5)
+        # cv2.imshow('stem_offset_norm', np.sqrt(np.square(stem_offset_x)+np.square(stem_offset_y))+0.5)
+        # cv2.waitKey()
+
+        # TODO stack targets and return
 
 
     def __len__(self):
         return len(self.filenames)
 
 
-# class SugarBeetDataset(object):
-
-    # def __init__(self, root, transforms):
-        # self.root = root
-        # self.transforms = transforms
-        # # load all image files, sorting them to
-        # # ensure that they are aligned
-        # self.imgs = list(sorted(os.listdir(os.path.join(root, "images/rgb"))))
-
-
-    # def __getitem__(self, idx):
-        # # load images ad masks
-        # img_path = os.path.join(self.root, "images/rgb/", self.imgs[idx])
-        # mask_path = os.path.join(self.root, "annotations/PNG/pixelwise/iMap", "{0}_GroundTruth_iMap.png".format(self.imgs[idx].split(".")[0]))
-
-        # img = Image.open(img_path).convert("RGB")
-        # img = np.array(img)
-        # # note that we haven't converted the mask to RGB,
-        # # because each color corresponds to a different instance
-        # # with 0 being background
-        # mask = Image.open(mask_path)
-        # # convert the PIL Image into a numpy array
-        # mask = np.array(mask)
-        # # instances are encoded as different colors
-        # obj_ids = np.array([0,1, 10000, 20001])
-        # # first id is the background, so remove it
-        # obj_ids = obj_ids[1:]
-        # # split the color-encoded mask into a set
-        # # of binary masks
-
-        # masks = mask == obj_ids[:, None, None]
-        # num_objs = len(obj_ids)
-
-        # # convert everything into a torch.Tensor
-        # labels = torch.ones((num_objs,), dtype=torch.int64)
-        # masks = torch.as_tensor(masks, dtype=torch.float32)
-
-        # image_id = torch.tensor([idx])
-
-        # # suppose all instances are not crowd
-        # iscrowd = torch.zeros((num_objs,), dtype=torch.int64)
-
-        # target = {}
-        # target["labels"] = labels
-        # target["masks"] = masks
-        # target["image_id"] = image_id
-        # target["iscrowd"] = iscrowd
-
-        # if self.transforms is not None:
-            # img = self.transforms(img)
-
-        # return img, target
-
-
-    # def __len__(self):
-        # return len(self.imgs)
