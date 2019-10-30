@@ -43,9 +43,9 @@ def compute_dataset_normalization_parameters():
     std = np.sqrt(variance)
 
     click.echo('mean_rgb: [{}, {}, {}]'.format(*list(mean[:3])))
-    click.echo('mean_nir: {}'.format(mean[3])
+    click.echo('mean_nir: {}'.format(mean[3]))
     click.echo('std_rgb: [{}, {}, {}]'.format(*list(std)))
-    click.echo('std_nir: {}'.format(std[3])
+    click.echo('std_nir: {}'.format(std[3]))
 
     click.echo('Done.')
 
