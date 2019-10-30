@@ -3,15 +3,16 @@
 Authors: Yung-Yu Chen, Jan Quakernack
 """
 
-import numpy as np
 import torch
+from torch.utils.data import Dataset
+from torchvision import transforms
+import numpy as np
+import cv2
 from PIL import Image
+import yaml
 from pathlib import Path
 
 from training import load_config, DATA_DIR
-
-from torch.utils.data import Dataset
-from torchvision import transforms
 
 
 class SugarBeetDataset(Dataset):
@@ -30,6 +31,7 @@ class SugarBeetDataset(Dataset):
                  label_background, label_ignore, label_weed, label_sugar_beet,
                  input_height, input_width, target_height, target_width,
                  mean_rgb, mean_nir, std_rgb, std_nir,
+                 keypoint_radius,
                  path_to_rgb_images, suffix_rgb_images,
                  path_to_nir_images, suffix_nir_images,
                  path_to_semantic_labels, suffix_semantic_labels,
@@ -37,6 +39,8 @@ class SugarBeetDataset(Dataset):
         """Constructor.
 
         Args:
+            mean_xxx, std_xxx: For normalization of intensity values.
+            keypoint_radius: Size of stem keypoint given as pixels in target.
             path_to_xxx (str), suffix_xxx (str): Where to find files and suffix
             specific for these files, e.g. 'annotations/dlp/iMapCleaned/',
             '_GroundTruthg_iMap.png'.
@@ -47,6 +51,8 @@ class SugarBeetDataset(Dataset):
         self.label_ignore = label_ignore
         self.label_weed = label_weed
         self.label_sugar_beet = label_sugar_beet
+
+        self.keypoint_radius = keypoint_radius
 
         self.path_to_rgb_images = SugarBeetDataset._assure_is_absolute_data_path(Path(path_to_rgb_images))
         self.suffix_rgb_images = suffix_rgb_images
@@ -61,6 +67,10 @@ class SugarBeetDataset(Dataset):
         self.suffix_stem_labels = suffix_stem_labels
 
         # transformations
+        self.input_height = input_height
+        self.input_width = input_width
+        self.target_height = target_height
+        self.target_width = target_width
         self.resize_input = transforms.Resize((input_height, input_width), interpolation=Image.BILINEAR)
         self.resize_target = transforms.Resize((target_height, target_width), interpolation=Image.NEAREST)
 
@@ -137,6 +147,10 @@ class SugarBeetDataset(Dataset):
         rgb_image = Image.open(self.get_path_to_rgb_image(filename)).convert('RGB')
         nir_image = Image.open(self.get_path_to_nir_image(filename)).convert('L')
 
+        original_height, original_width = np.array(rgb_image).shape[:2]
+        target_scale_factor_x = self.target_width/original_width
+        target_scale_factor_y = self.target_height/original_height
+
         rgb_image = self.resize_input(rgb_image)
         nir_image = self.resize_input(nir_image)
 
@@ -149,7 +163,12 @@ class SugarBeetDataset(Dataset):
         semantic_target = self._make_semantic_target(semantic_label)
 
         # make stem target
-        # TODO
+        with self.get_path_to_stem_label(filename).open('r') as yaml_file:
+            stem_label = yaml.safe_load(yaml_file)
+
+        stem_target = self._make_stem_target(stem_label,
+                                             target_scale_factor_x=target_scale_factor_x,
+                                             target_scale_factor_y=target_scale_factor_y)
 
         # random transformations
         # TODO keep in mind that we need to be able to transform stem positions (x, y) in the same way
@@ -168,6 +187,8 @@ class SugarBeetDataset(Dataset):
         # convert targets to tensors
         semantic_target_tensor = torch.from_numpy(semantic_target) # shape (target_height, target_width,)
 
+        # TODO return stem_target_tensor once implemented
+
         return input_tensor, semantic_target_tensor
 
 
@@ -182,11 +203,50 @@ class SugarBeetDataset(Dataset):
         return semantic_target
 
 
-    def _make_stem_target(self, stem_label):
-        """Construct mask and offset vectors for mixed classification and regression.
+    def _make_stem_target(self, stem_label,
+                          target_scale_factor_x, target_scale_factor_y):
+        """Construct keypoint mask and offset vectors for mixed classification and regression.
         """
-        # TODO
-        pass
+        # get stem positions from dictionary
+        stem_positions = [(annotation['stem']['x']*target_scale_factor_x,
+                           annotation['stem']['y']*target_scale_factor_y)
+                          for annotation in stem_label['annotation']
+                          if (annotation['stem']['x']>=0.0
+                              and annotation['stem']['y']>=0.0)]
+
+        stem_keypoints = np.zeros((self.target_height, self.target_width), dtype=np.int)
+        stem_offset_x = np.zeros((self.target_height, self.target_width), dtype=np.float)
+        stem_offset_y = np.zeros((self.target_height, self.target_width), dtype=np.float)
+
+        for stem_x, stem_y in stem_positions:
+            # put a disk with keypoint_radius at each stem position for classification target
+            keypoint_mask = np.zeros((self.target_height, self.target_width), dtype=np.uint8)
+            keypoint_mask = cv2.circle(keypoint_mask,
+                                       (int(np.round(stem_x)), int(np.round(stem_y))),
+                                       radius=self.keypoint_radius,
+                                       color=255, thickness=-1)
+            keypoint_mask = keypoint_mask>0
+            stem_keypoints = np.where(keypoint_mask, 1, stem_keypoints)
+
+            # compute offset vector for all pixels in mask
+            mask_ys, mask_xs = np.where(keypoint_mask)
+            stem_offset_x[keypoint_mask] = (stem_x-mask_xs)/self.keypoint_radius
+            stem_offset_y[keypoint_mask] = (stem_y-mask_ys)/self.keypoint_radius
+
+            # TODO if two keypoint overlap, take the nearer one to compute offset
+
+        # force all offsets to be in range -1, 1
+        # there may be small deviation due to pixel discretization of keypoint mask
+        stem_offset_x = np.clip(stem_offset_x, -1.0, 1.0)
+        stem_offset_y = np.clip(stem_offset_x, -1.0, 1.0)
+
+        # cv2.imshow('stem_keypoints', (255.0*stem_keypoints).astype(np.uint8))
+        # cv2.imshow('stem_offset_x', stem_offset_x+0.5)
+        # cv2.imshow('stem_offset_y', stem_offset_y+0.5)
+        # cv2.imshow('stem_offset_norm', np.sqrt(np.square(stem_offset_x)+np.square(stem_offset_y))+0.5)
+        # cv2.waitKey()
+
+        # TODO stack targets and return
 
 
     def __len__(self):

@@ -16,7 +16,7 @@ std_rgb: [0.12405956089564812, 0.07152223154313433, 0.010760791977355064]
 std_nir: 0.06568905699414836
 
 # stem target
-# keypoint_radius: 15 # in target pixels
+keypoint_radius: 15 # in target pixels
 
 path_to_rgb_images: 'sugar_beet_dataset/images/rgb/'
 suffix_rgb_images: '.png'
