@@ -15,7 +15,7 @@ import numpy as np
 
 n_class    = 3
 batch_size = 1
-epochs     = 1
+epochs     = 500
 lr         = 1e-4
 momentum   = 0
 w_decay    = 1e-5
@@ -118,10 +118,7 @@ def main():
     # criterion = nn.BCEWithLogitsLoss()
     criterion = nn.CrossEntropyLoss(ignore_index=1)
 
-    # let's train it for 10 epochs
-    num_epochs = 10
-
-    for epoch in range(num_epochs):
+    for epoch in range(epochs):
         min_loss = 1.
         # train for one epoch, printing every 10 iterations
         for iter, batch in enumerate(data_loader):
@@ -144,14 +141,23 @@ def main():
             loss.backward()
             optimizer.step()
 
-        # evaluation
-        # TODO
-        # for iter, batch in enumerate(data_loader_test):
-        #     inputs, targets = batch
-        #     inputs = inputs.to(device)
-        #
-        #     with torch.no_grad():
-        #         outputs = model(inputs)
+    # evaluation after every epoch
+    # TODO
+    for iter, batch in enumerate(data_loader_test):
+        inputs, targets = batch
+        inputs = inputs.to(device)
+    
+        with torch.no_grad():
+            test_output = model(inputs)
+            class_confidences = nn.functional.softmax(test_output, dim=1)
+            sugar_beet_confidence = class_confidences.cpu().detach().numpy()[0, 2, ...]
+
+            cv_sugar_beet_confidence = get_confidence_map(sugar_beet_confidence)
+            cv_input = test_input.cpu().detach().numpy()[0].transpose(1, 2, 0)
+            cv_target = test_target.cpu().detach().numpy()
+            cv_target_sugar_beet = (255*(cv_target[0, ...]==2)).astype(np.uint8)
+            visualize_single_confidence(cv_input, cv_target_sugar_beet, cv_sugar_beet_confidence)
+            
 
 
 if __name__ == "__main__":
