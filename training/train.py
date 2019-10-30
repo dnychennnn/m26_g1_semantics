@@ -7,7 +7,7 @@ from torch.optim import lr_scheduler
 from torch.autograd import Variable
 from torchvision import transforms
 from dataloader import SugarBeetDataset
-from utils import intersectionAndUnion, accuracy, visualize
+from utils import intersectionAndUnion, accuracy, visualize, visualize_single_confidence, get_confidence_map
 import time
 import cv2
 import numpy as np
@@ -35,7 +35,7 @@ _transform = transforms.ToTensor()
 def main():
     # train on the GPU or on the CPU, if a GPU is not available
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    # device = 'cpu'
+    device = 'cpu'
 
     # our dataset has three classes only - background, weed and crop
     num_classes = 3
@@ -71,13 +71,11 @@ def main():
             class_confidences = nn.functional.softmax(test_output, dim=1)
 
             cv_input = test_input.cpu().detach().numpy()[0].transpose(1, 2, 0)
+            print(class_confidences.cpu().detach().numpy().shape)
             cv_sugar_beet_confidence = class_confidences.cpu().detach().numpy()[0, 2, ...]
 
-            min_confidence = np.min(cv_sugar_beet_confidence)
-            max_confidence = np.max(cv_sugar_beet_confidence)
-            print('confidence min, max =', min_confidence, max_confidence)
-
-            cv_sugar_beet_confidence = (255.0*(cv_sugar_beet_confidence-min_confidence/(max_confidence-min_confidence+0.0001))).astype(np.uint8)
+            
+            cv_sugar_beet_confidence = get_confidence_map(cv_sugar_beet_confidence)
             cv_target = test_target.cpu().detach().numpy()
             cv_target_sugar_beet = (255*(cv_target[0, ...]==2)).astype(np.uint8)
             # cv_target_sugar_beet = 50*(cv_target.transpose(1, 2, 0)).astype(np.uint8)
@@ -87,10 +85,8 @@ def main():
             # print(cv_input.shape)
             # print(cv_sugar_beet_confidence.shape)
 
-            cv2.imshow('taget sugar beet', cv_target_sugar_beet)
-            cv2.imshow('input', cv_input)
-            cv2.imshow('sugar beet', cv_sugar_beet_confidence)
-            cv2.waitKey(1)
+            visualize_single_confidence(cv_input, cv_target_sugar_beet, cv_sugar_beet_confidence)
+
 
     exit()
 
