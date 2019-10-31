@@ -14,16 +14,29 @@ import cv2
 
 from training.model.simple_unet import SimpleUnet
 from training.dataloader import SugarBeetDataset
+from training.losses import StemClassificationLoss, StemRegressionLoss
 from training import LOGS_DIR
 
 
 def main():
     learning_rate = 0.001
     batch_size = 6
-    # semantic_loss_weight = 1.0
-    # stem_loss_weight = 0.0
-
     num_epochs = 500
+
+    # weighting of losses
+    semantic_loss_weight = 0.25
+    stem_loss_weight = 0.25
+    stem_classification_loss_weight = 0.25
+    stem_regression_loss_weight = 0.25
+
+    # class weights for semantic segmentation
+    weight_background = 0.1
+    weight_weed = 0.5
+    weight_sugar_beet = 0.3
+
+    # class weights for stem keypoint detection
+    weight_stem_background = 0.99
+    weight_stem = 0.01
 
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -34,6 +47,9 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     semantic_loss_function = nn.CrossEntropyLoss(ignore_index=1, weight=torch.Tensor([0.9, 0.05, 0.05])).to(device)
+
+    stem_classification_loss_function = StemClassificationLoss(weight_background=weight_stem_background, weight_stem=weight_stem).to(device)
+    stem_regression_loss_function = StemRegressionLoss()
 
     now = datetime.datetime.now()
     run_time_string = now.strftime('%b_%d_%Y_%Hh%M')
@@ -46,20 +62,42 @@ def main():
         for batch_index, batch in enumerate(data_loader):
             print('Train batch {}/{} in epoch {}/{}.'.format(batch_index, len(data_loader), epoch_index, num_epochs))
 
-            input_batch, semantic_target_batch, stem_keypoint_target_batch, stem_offset_target_batch = batch
-
             model.train()
             optimizer.zero_grad()
 
+            # get input an bring to device
+            input_batch, semantic_target_batch, stem_keypoint_target_batch, stem_offset_target_batch = batch
+
             input_batch = input_batch.to(device)
             semantic_target_batch = semantic_target_batch.to(device)
-            # stem_keypoint_target_batch = stem_keypoint_target_batch.to(device)
-            # stem_offset_target_batch = stem_offset_target_batch.to(device)
+            stem_keypoint_target_batch = stem_keypoint_target_batch.to(device)
+            stem_offset_target_batch = stem_offset_target_batch.to(device)
 
-            semantic_output_batch, stem_output_batch = model(input_batch)
-            loss = semantic_loss_function(semantic_output_batch, semantic_target_batch)
+            # foward pass
+            semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = model(input_batch)
 
-            print('Loss: {:06f}'.format(loss.item()))
+            # compute losses
+            semantic_loss = semantic_loss_weight*\
+                            semantic_loss_function(semantic_output_batch,
+                                                   semantic_target_batch)
+
+            stem_classification_loss = stem_loss_weight*stem_classification_loss_weight*\
+                                       stem_classification_loss_function(stem_keypoint_output_batch=stem_keypoint_output_batch,
+                                                                         stem_keypoint_target_batch=stem_keypoint_target_batch)
+
+            stem_regression_loss = stem_loss_weight*stem_regression_loss_weight*\
+                                   stem_regression_loss_function(stem_offset_output_batch=stem_offset_output_batch,
+                                                                 stem_keypoint_target_batch=stem_keypoint_target_batch,
+                                                                 stem_offset_target_batch=stem_offset_target_batch)
+
+            stem_loss = stem_classification_loss+stem_regression_loss
+            loss = semantic_loss+stem_loss
+
+            print('  loss: {:04f}'.format(loss.item()))
+            print('  semantic_loss: {:04f}'.format(semantic_loss.item()))
+            print('  stem_loss: {:04f}'.format(stem_loss.item()))
+            print('  stem_classification_loss: {:04f}'.format(stem_classification_loss.item()))
+            print('  stem_regression_loss: {:04f}'.format(stem_regression_loss.item()))
 
             loss.backward()
             optimizer.step()

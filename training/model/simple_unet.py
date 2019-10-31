@@ -78,7 +78,10 @@ class SimpleUnet(nn.Module):
         stem_output = self.stem_decoder(x, skips)
         stem_output = self.final_conv_semantic(stem_output)
 
-        return semantic_output, stem_output
+        stem_keypoint_output = stem_output[:, 0, ...]
+        stem_offset_output = stem_output[:, 1:, ...]
+
+        return semantic_output, stem_keypoint_output, stem_offset_output
 
 
 class Encoder(nn.Module):
