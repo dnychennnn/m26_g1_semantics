@@ -220,10 +220,13 @@ class SugarBeetDataset(Dataset):
         Returns:
             A list of (x, y) tuples.
         """
-        return [(annotation['stem']['x'], annotation['stem']['y'])
-                 for annotation in annotations_dict['annotation']
-                 if (annotation['stem']['x']>=0.0
-                     and annotation['stem']['y']>=0.0)]
+        try:
+          return [(annotation['stem']['x'], annotation['stem']['y'])
+                   for annotation in annotations_dict['annotation']
+                   if (annotation['stem']['x']>=0.0
+                       and annotation['stem']['y']>=0.0)]
+        except KeyError:
+          return []
 
 
     def _make_stem_target(self, target_stem_positions):
@@ -235,7 +238,7 @@ class SugarBeetDataset(Dataset):
 
         Returns:
             A tuple of the classification target of shape (target_height, target_width,)
-            as an integer numpy.array and regression target of shape
+            as an float numpy.array and regression target of shape
             (2, target_height, target_width,) as a float numpy.array.
         """
         keypoint_target = self._make_stem_classification_target(target_stem_positions)
@@ -255,9 +258,9 @@ class SugarBeetDataset(Dataset):
 
         Returns:
             A keypoint masks of shape (target_height, target_width,) as an
-            integer numpy.array with 0=background, 1=stem.
+            float32 numpy.array with 0.0=background, 1.0=stem.
         """
-        keypoint_target = np.zeros((self.target_height, self.target_width,), dtype=np.uint8)
+        keypoint_target = np.zeros((self.target_height, self.target_width,), dtype=np.float32)
 
         for stem_x, stem_y in target_stem_positions:
             # put a disk with keypoint_radius at each stem position for classification target
@@ -266,8 +269,8 @@ class SugarBeetDataset(Dataset):
                        radius=self.keypoint_radius,
                        color=255, thickness=-1)
 
-        # convert to integer, so we have class labels
-        keypoint_target = (keypoint_target>0).astype(np.int)
+        # convert to float
+        keypoint_target = (keypoint_target>0).astype(np.float32)
 
         # debug output
         # cv2.imshow('keypoint_target', (255*keypoint_target).astype(np.uint8))
@@ -288,26 +291,26 @@ class SugarBeetDataset(Dataset):
             stem positions already transformed to pixel corrdinates in target.
 
         Returns:
-            A float numpy.array of shape (2, target_height, target_width,)
+            A float32 numpy.array of shape (2, target_height, target_width,)
             with x and y offsets for each pixel.
         """
         num_stems = len(target_stem_positions)
         if num_stems==0:
             # no stems, return zeros
-            return np.zeros((2, self.target_height, self.target_width), dytpe=np.float)
+            return np.zeros((2, self.target_height, self.target_width), dtype=np.float32)
 
         # x, y for all pixels in target
-        xs = np.arange(self.target_width, dtype=np.int).reshape(1, 1, self.target_width)
-        ys = np.arange(self.target_height, dtype=np.int).reshape(1, self.target_height, 1)
+        xs = np.arange(self.target_width, dtype=np.float32).reshape(1, 1, self.target_width)
+        ys = np.arange(self.target_height, dtype=np.float32).reshape(1, self.target_height, 1)
 
         # x, y, for all stems
-        target_stem_positions = np.array(target_stem_positions)
+        target_stem_positions = np.array(target_stem_positions, dtype=np.float32)
         stem_xs = (target_stem_positions[:, 0]).reshape(num_stems, 1, 1)
         stem_ys = (target_stem_positions[:, 1]).reshape(num_stems, 1, 1)
 
         # compute offset using broadcasting
-        offsets_x = (stem_xs-xs).astype(np.float)
-        offsets_y = (stem_ys-ys).astype(np.float)
+        offsets_x = stem_xs-xs
+        offsets_y = stem_ys-ys
 
         # stack, so we have an offset for each pixel
         offsets_x = np.repeat(offsets_x, repeats=self.target_height, axis=1)
