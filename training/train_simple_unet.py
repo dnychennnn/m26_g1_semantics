@@ -15,6 +15,7 @@ import cv2
 from training.model.simple_unet import SimpleUnet
 from training.dataloader import SugarBeetDataset
 from training.losses import StemClassificationLoss, StemRegressionLoss
+from training import vis
 from training import LOGS_DIR
 
 
@@ -38,15 +39,28 @@ def main():
     weight_stem_background = 0.99
     weight_stem = 0.01
 
+    size_test_set = 25
+
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
     dataset = SugarBeetDataset.from_config()
-    data_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    # split into train and test set
+    indices = torch.randperm(len(dataset)).tolist()
+    dataset_train = torch.utils.data.Subset(dataset, indices)
+
+    # use some images from the train set for testing
+    # just for testing, we will probably overfit at some stage
+    dataset_test = torch.utils.data.Subset(dataset, indices[-size_test_set:])
+
+    # define training and validation data loaders
+    data_loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size, shuffle=True)
+    data_loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=1, shuffle=False)
 
     model = SimpleUnet.from_config().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-    semantic_loss_function = nn.CrossEntropyLoss(ignore_index=1, weight=torch.Tensor([0.9, 0.05, 0.05])).to(device)
+    semantic_loss_function = nn.CrossEntropyLoss(ignore_index=1, weight=torch.Tensor([weight_background, weight_weed, weight_sugar_beet])).to(device)
 
     stem_classification_loss_function = StemClassificationLoss(weight_background=weight_stem_background, weight_stem=weight_stem).to(device)
     stem_regression_loss_function = StemRegressionLoss()
@@ -59,14 +73,22 @@ def main():
         log_dir.mkdir()
 
     for epoch_index in range(num_epochs):
-        for batch_index, batch in enumerate(data_loader):
-            print('Train batch {}/{} in epoch {}/{}.'.format(batch_index, len(data_loader), epoch_index, num_epochs))
+        for batch_index, batch in enumerate(data_loader_train):
+            print('Train batch {}/{} in epoch {}/{}.'.format(batch_index, len(data_loader_train), epoch_index, num_epochs))
 
             model.train()
             optimizer.zero_grad()
 
             # get input an bring to device
             input_batch, semantic_target_batch, stem_keypoint_target_batch, stem_offset_target_batch = batch
+
+            # debug overfit first image in dataset
+            # input_batch, semantic_target_batch, stem_keypoint_target_batch, stem_offset_target_batch = dataset[0]
+
+            # input_batch = input_batch[None, ...]
+            # semantic_target_batch = semantic_target_batch[None, ...]
+            # stem_keypoint_target_batch = stem_keypoint_target_batch[None, ...]
+            # stem_offset_target_batch = stem_offset_target_batch[None, ...]
 
             input_batch = input_batch.to(device)
             semantic_target_batch = semantic_target_batch.to(device)
@@ -102,23 +124,40 @@ def main():
             loss.backward()
             optimizer.step()
 
-            if batch_index==len(data_loader)-1:
-                # end of epoch, make checkpoint
-                print('Checkpoint.')
-                cp_dir = make_checkpoint(run_name, log_dir, epoch_index, model)
+        # end of epoch
+        print('End of epoch. Make checkpoint.')
+        cp_dir = make_checkpoint(run_name, log_dir, epoch_index, model)
 
-                # Save output of last batch
-                semantic_output_batch = nn.functional.softmax(semantic_output_batch, dim=1)
+        # pass test set through network and save example images
+        examples_dir = cp_dir/'examples'
+        if not examples_dir.exists():
+            examples_dir.mkdir()
 
-                examples_dir = cp_dir/'examples'
-                if not examples_dir.exists():
-                    examples_dir.mkdir()
+        for batch_index, batch in enumerate(data_loader_test):
+            model.eval()
 
-                num_slices = semantic_output_batch.shape[0]
+            # get input an bring to device
+            input_batch, semantic_target_batch, stem_keypoint_target_batch, stem_offset_target_batch = batch
 
-                for slice_index in range(num_slices):
-                    image = make_image(input_batch[slice_index], semantic_output_batch[slice_index])
-                    cv2.imwrite(str(examples_dir/'example_{:02}.png'.format(slice_index)), image)
+            input_batch = input_batch.to(device)
+            semantic_target_batch = semantic_target_batch.to(device)
+            stem_keypoint_target_batch = stem_keypoint_target_batch.to(device)
+            stem_offset_target_batch = stem_offset_target_batch.to(device)
+
+            # foward pass
+            semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = model(input_batch)
+
+            path_for_plots = examples_dir/'sample_{:02d}'.format(batch_index)
+            save_plots(path_for_plots,
+                       input_slice=input_batch[0],
+                       semantic_output=semantic_output_batch[0],
+                       stem_keypoint_output=stem_keypoint_output_batch[0],
+                       stem_offset_output=stem_offset_output_batch[0],
+                       keypoint_radius=dataset.keypoint_radius,
+                       mean_rgb=dataset.mean_rgb,
+                       std_rgb=dataset.std_rgb,
+                       mean_nir=dataset.mean_nir,
+                       std_nir=dataset.std_nir)
 
 
 def make_checkpoint(run_name, log_dir, epoch, model):
@@ -132,25 +171,53 @@ def make_checkpoint(run_name, log_dir, epoch, model):
     return cp_dir
 
 
-def make_image(input_slice, semantic_slice):
-    input_slice = input_slice.cpu().detach().numpy()
-    semantic_slice = semantic_slice.cpu().detach().numpy()
-    height, width = input_slice.shape[-2:]
-    image = input_slice.transpose((1, 2, 0))[..., :3]
+def save_plots(path, input_slice, semantic_output, stem_keypoint_output, stem_offset_output, keypoint_radius, **normalization):
+    """Make plots and write images.
+    """
+    image_bgr = vis.tensor_to_bgr(input_slice[:3],
+                                  mean_rgb=normalization['mean_rgb'],
+                                  std_rgb=normalization['std_rgb'])
 
-    sugar_beet_color = np.array([1.0, 0.0, 0.0]).reshape(1, 1, 3)
-    weed_color = np.array([0, 0, 1.0]).reshape(1, 1, 3)
+    image_nir = vis.tensor_to_single_channel(input_slice[3],
+                                             mean=normalization['mean_nir'],
+                                             std=normalization['std_nir'])
 
-    weed_confidence = semantic_slice[1, ...][..., None]
-    sugar_beet_confidence = semantic_slice[2, ...][..., None]
+    image_false_color = vis.tensor_to_false_color(input_slice[:3], input_slice[3], **normalization)
 
-    image = np.where(weed_confidence>0.3, weed_color, image)
-    image = np.where(sugar_beet_confidence>0.3, sugar_beet_color, image)
 
-    # cv2.imshow('image', image)
-    # cv2.waitKey()
+    plot_semantics = vis.make_plot_from_semantic_output(input_rgb=input_slice[:3],
+                                                        input_nir=input_slice[3],
+                                                        semantic_output=semantic_output,
+                                                        apply_softmax=True, **normalization)
 
-    return (255.0*image).astype(np.uint8)
+    plot_stems = vis.make_plot_from_stem_output(input_rgb=input_slice[:3],
+                                                input_nir=input_slice[3],
+                                                stem_keypoint_output=stem_keypoint_output,
+                                                stem_offset_output=stem_offset_output,
+                                                keypoint_radius=keypoint_radius,
+                                                apply_sigmoid=True,
+                                                apply_tanh=True,
+                                                **normalization)
+
+    path_rgb = path.parent/(path.name+'_rgb.jpg')
+    path_nir = path.parent/(path.name+'_nir.jpg')
+    path_false_color = path.parent/(path.name+'_false_color.jpg')
+    path_semantics = path.parent/(path.name+'_semantics.jpg')
+    path_stems = path.parent/(path.name+'_stems.jpg')
+
+    # debug output
+    # cv2.imshow('plot_semantics', plot_semantics)
+    # cv2.imshow('plot_stems', plot_stems)
+    # cv2.imshow('image_bgr', image_bgr)
+    # cv2.imshow('image_nir', image_nir)
+    # cv2.imshow('image_false_color', image_false_color)
+    # cv2.waitKey(0)
+
+    cv2.imwrite(str(path_rgb), (255.0*image_bgr).astype(np.uint8))
+    cv2.imwrite(str(path_nir), (255.0*image_nir).astype(np.uint8))
+    cv2.imwrite(str(path_false_color), (255.0*image_false_color).astype(np.uint8))
+    cv2.imwrite(str(path_semantics), (255.0*plot_semantics).astype(np.uint8))
+    cv2.imwrite(str(path_stems), (255.0*plot_stems).astype(np.uint8))
 
 
 if __name__=='__main__':
