@@ -154,7 +154,7 @@ def make_plot_from_stem_output(input_rgb, input_nir, stem_keypoint_output, stem_
             if stem_heatmap[y, x]>0.5:
                 offset_x = keypoint_radius*stem_offset_x[y, x]
                 offset_y = keypoint_radius*stem_offset_y[y, x]
-                cv2.arrowedLine(arrows, (x, y), (x+offset_x, y+offset_y), (1.0, 1.0, 1.0), thickness=1, tipLength=0.5)
+                cv2.arrowedLine(arrows, (x-offset_x, y-offset_y), (x, y), (1.0, 1.0, 1.0), thickness=1, tipLength=0.5)
 
     plot = plot+0.5*arrows
     plot = np.clip(plot, 0.0, 1.0)
