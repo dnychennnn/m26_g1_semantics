@@ -11,12 +11,13 @@ from torch import nn
 import datetime
 import numpy as np
 import cv2
+from pathlib import Path
 
 from training.model.simple_unet import SimpleUnet
 from training.dataloader import SugarBeetDataset
 from training.losses import StemClassificationLoss, StemRegressionLoss
 from training import vis
-from training import LOGS_DIR
+from training import LOGS_DIR, MODELS_DIR
 
 
 def main():
@@ -40,6 +41,7 @@ def main():
     weight_stem = 0.99
 
     size_test_set = 25
+    weights_path = "simple_unet.pth"
 
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -58,6 +60,8 @@ def main():
     data_loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=1, shuffle=False)
 
     model = SimpleUnet.from_config().to(device)
+    model = load_weights(model, weights_path)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     semantic_loss_function = nn.CrossEntropyLoss(ignore_index=1, weight=torch.Tensor([weight_background, weight_weed, weight_sugar_beet])).to(device)
@@ -218,6 +222,34 @@ def save_plots(path, input_slice, semantic_output, stem_keypoint_output, stem_of
     cv2.imwrite(str(path_false_color), (255.0*image_false_color).astype(np.uint8))
     cv2.imwrite(str(path_semantics), (255.0*plot_semantics).astype(np.uint8))
     cv2.imwrite(str(path_stems), (255.0*plot_stems).astype(np.uint8))
+
+
+def load_weights(model, path):
+    """Load model weights from .pth file.
+
+    If path is relative, assume weights are in MODELS_DIR/path.
+
+    Note: This funcion contains parts, which were written for other student projects
+    conducted by the author.
+    """
+    path = Path(path)
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model.to(device)
+
+    if not path.is_absolute():
+      path = MODELS_DIR/path
+
+    print('Load weights from {}.'.format(path))
+
+    model_dict = torch.load(path, map_location=device)
+    model.load_state_dict(model_dict)
+
+    trainable_parameters = filter(lambda parameter: parameter.requires_grad, model.parameters())
+    num_trainable_parameters = sum([np.prod(parameter.size()) for parameter in trainable_parameters])
+    print('Number of trainable model parameters: {}'.format(num_trainable_parameters))
+
+    return model
 
 
 if __name__=='__main__':
