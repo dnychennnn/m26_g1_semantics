@@ -43,14 +43,18 @@ def main():
         log_dir.mkdir()
 
     for epoch_index in range(num_epochs):
-        for batch_index, (input_batch, semantic_target_batch) in enumerate(data_loader):
+        for batch_index, batch in enumerate(data_loader):
             print('Train batch {}/{} in epoch {}/{}.'.format(batch_index, len(data_loader), epoch_index, num_epochs))
+
+            input_batch, semantic_target_batch, stem_keypoint_target_batch, stem_offset_target_batch = batch
 
             model.train()
             optimizer.zero_grad()
 
             input_batch = input_batch.to(device)
             semantic_target_batch = semantic_target_batch.to(device)
+            # stem_keypoint_target_batch = stem_keypoint_target_batch.to(device)
+            # stem_offset_target_batch = stem_offset_target_batch.to(device)
 
             semantic_output_batch, stem_output_batch = model(input_batch)
             loss = semantic_loss_function(semantic_output_batch, semantic_target_batch)
