@@ -22,7 +22,7 @@ from training import LOGS_DIR, MODELS_DIR
 
 def main():
     learning_rate = 0.001
-    batch_size = 6
+    batch_size = 8
     num_epochs = 500
 
     # weighting of losses
