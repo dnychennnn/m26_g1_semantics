@@ -74,6 +74,11 @@ class SugarBeetDataset(Dataset):
         self.resize_input = transforms.Resize((input_height, input_width), interpolation=Image.BILINEAR)
         self.resize_target = transforms.Resize((target_height, target_width), interpolation=Image.NEAREST)
 
+        self.mean_rgb = mean_rgb
+        self.std_rgb = std_rgb
+        self.mean_nir = mean_nir
+        self.std_nir = std_nir
+
         self.rgb_normalization = transforms.Normalize(mean=mean_rgb, std=std_rgb, inplace=True)
         self.nir_normalization = transforms.Normalize(mean=(mean_nir,), std=(std_nir,), inplace=True)
 
