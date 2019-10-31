@@ -25,10 +25,10 @@ def main():
     num_epochs = 500
 
     # weighting of losses
-    semantic_loss_weight = 0.25
-    stem_loss_weight = 0.25
-    stem_classification_loss_weight = 0.25
-    stem_regression_loss_weight = 0.25
+    semantic_loss_weight = 0.5
+    stem_loss_weight = 0.5
+    stem_classification_loss_weight = 0.5
+    stem_regression_loss_weight = 0.5
 
     # class weights for semantic segmentation
     weight_background = 0.1
@@ -36,8 +36,8 @@ def main():
     weight_sugar_beet = 0.3
 
     # class weights for stem keypoint detection
-    weight_stem_background = 0.99
-    weight_stem = 0.01
+    weight_stem_background = 0.01
+    weight_stem = 0.99
 
     size_test_set = 25
 
