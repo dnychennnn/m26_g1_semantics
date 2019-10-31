@@ -9,7 +9,7 @@ def visualize(image, mask):
 
     plot.subplot(212)
     plot.imshow(mask)
-    plot.show() 
+    plot.show()
 
 def get_confidence_map(confidence):
     min_confidence = np.min(confidence)
