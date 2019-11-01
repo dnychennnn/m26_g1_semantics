@@ -66,7 +66,7 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-    semantic_loss_function = nn.CrossEntropyLoss(ignore_index=1, weight=torch.Tensor([weight_background, weight_weed, weight_sugar_beet])).to(device)
+    semantic_loss_function = nn.CrossEntropyLoss(ignore_index=3, weight=torch.Tensor([weight_background, weight_weed, weight_sugar_beet])).to(device)
 
     stem_classification_loss_function = StemClassificationLoss(weight_background=weight_stem_background, weight_stem=weight_stem).to(device)
     stem_regression_loss_function = StemRegressionLoss()
@@ -147,6 +147,14 @@ def main():
 
             # get input an bring to device
             input_batch, semantic_target_batch, stem_keypoint_target_batch, stem_offset_target_batch = batch
+
+            # debug overfit first image in dataset
+            # input_batch, semantic_target_batch, stem_keypoint_target_batch, stem_offset_target_batch = dataset[0]
+
+            # input_batch = input_batch[None, ...]
+            # semantic_target_batch = semantic_target_batch[None, ...]
+            # stem_keypoint_target_batch = stem_keypoint_target_batch[None, ...]
+            # stem_offset_target_batch = stem_offset_target_batch[None, ...]
 
             input_batch = input_batch.to(device)
             semantic_target_batch = semantic_target_batch.to(device)

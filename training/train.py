@@ -116,7 +116,7 @@ def main():
     scheduler = lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)  # decay LR by a factor of 0.5 every 30 epochs
 
     # criterion = nn.BCEWithLogitsLoss()
-    criterion = nn.CrossEntropyLoss(ignore_index=1)
+    criterion = nn.CrossEntropyLoss(ignore_index=3)
 
     for epoch in range(epochs):
         min_loss = 1.
