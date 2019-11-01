@@ -198,7 +198,7 @@ class SugarBeetDataset(Dataset):
         # convert targets to tensors
         semantic_target_tensor = torch.from_numpy(semantic_target) # shape (target_height, target_width,)
 
-        stem_keypoint_target_tensor = torch.from_numpy(stem_keypoint_target) # shape (target_height, target_width,)
+        stem_keypoint_target_tensor = torch.from_numpy(stem_keypoint_target) # shape (1, target_height, target_width,)
         stem_offset_target_tensor = torch.from_numpy(stem_offset_target) # shape (2, target_height, target_width,)
 
         return input_tensor, semantic_target_tensor, stem_keypoint_target_tensor, stem_offset_target_tensor
@@ -274,8 +274,8 @@ class SugarBeetDataset(Dataset):
                        radius=self.keypoint_radius,
                        color=255, thickness=-1)
 
-        # convert to float
-        keypoint_target = (keypoint_target>0).astype(np.float32)
+        # convert to float and add extra dimension for channels
+        keypoint_target = (keypoint_target>0).astype(np.float32)[None, ...]
 
         # debug output
         # cv2.imshow('keypoint_target', (255*keypoint_target).astype(np.uint8))
@@ -326,7 +326,6 @@ class SugarBeetDataset(Dataset):
 
         # debug output
         # for stem_index in range(num_stems):
-          # cv2.imshow('keypoint_mask', (255.0*keypoint_masks[stem_index]).astype(np.uint8))
           # target_diagonal = np.linalg.norm([self.target_height, self.target_width])
           # cv2.imshow('offsets_norm', 5.0*offsets_norm[stem_index]/target_diagonal)
           # cv2.imshow('offsets_x', 5.0*offsets_x[stem_index]/target_diagonal)
@@ -348,15 +347,17 @@ class SugarBeetDataset(Dataset):
         # cv2.imshow('offset_to_nearest_stem_y', 5.0*offsets_to_nearest_stem_y/target_diagonal)
         # cv2.waitKey()
 
-        # normalize offset by keypoint_radius, clip to make sure all offsets are in range -1, 1
+        # normalize offset by keypoint_radius
         offsets_to_nearest_stem_x /= self.keypoint_radius
         offsets_to_nearest_stem_y /= self.keypoint_radius
-        offsets_to_nearest_stem_x = np.clip(offsets_to_nearest_stem_x, -1.0, 1.0)
-        offsets_to_nearest_stem_y = np.clip(offsets_to_nearest_stem_y, -1.0, 1.0)
+
+        # clip to make sure all offsets are in range -1, 1
+        # offsets_to_nearest_stem_x = np.clip(offsets_to_nearest_stem_x, -1.0, 1.0)
+        # offsets_to_nearest_stem_y = np.clip(offsets_to_nearest_stem_y, -1.0, 1.0)
 
         # debug output
-        # cv2.imshow('offsets_to_nearest_stem_x', offsets_to_nearest_stem_x)
-        # cv2.imshow('offsets_to_nearest_stem_y', offsets_to_nearest_stem_y)
+        # cv2.imshow('offsets_to_nearest_stem_x', 0.5*offsets_to_nearest_stem_x+0.5)
+        # cv2.imshow('offsets_to_nearest_stem_y', 0.5*offsets_to_nearest_stem_y+0.5)
         # cv2.waitKey()
 
         # stack everything to have an array of shape (2, target_height, target_width,)

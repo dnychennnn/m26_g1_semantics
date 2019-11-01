@@ -6,6 +6,8 @@ Author:
 
 import torch
 import torch.nn as nn
+import numpy as np
+import cv2
 
 
 class StemClassificationLoss(nn.Module):
@@ -25,27 +27,42 @@ class StemClassificationLoss(nn.Module):
 
 
 class StemRegressionLoss(nn.Module):
-    """Mean squared error applied to x and y offset of all keypoint pixels.
+    """Loss for x and y offset of all keypoint pixels.
     """
 
     def __init__(self):
         super().__init__()
-        self.tanh = nn.Tanh()
-        self.criterion = nn.MSELoss()
+        # self.tanh = nn.Tanh()
+        # self.criterion = nn.MSELoss()
+        self.criterion = nn.L1Loss() # Huber loss
 
 
     def forward(self, stem_offset_output_batch, stem_keypoint_target_batch,
                 stem_offset_target_batch):
         # apply tanh to have offsets in range -1, 1
-        normalized_offset_output_batch = self.tanh(stem_offset_output_batch)
+        # normalized_offset_output_batch = self.tanh(stem_offset_output_batch)
+
+        # no tanh, use plain logits
+        normalized_offset_output_batch = stem_offset_output_batch
 
         # make a mask containing all keypoint pixels
         # shape (batch_size, 2, target_height, target_width,)
-        keypoint_mask_batch = torch.stack(2*[stem_keypoint_target_batch>0], dim=1)
+        keypoint_mask_batch = torch.cat(2*[stem_keypoint_target_batch>0], dim=1)
+
+        # debug output
+        # np_keypoint_mask = keypoint_mask_batch.cpu().detach().numpy()
+        # cv2.imshow('keypoint_mask', (225*np_keypoint_mask[0, 0]).astype(np.uint8))
+        # cv2.waitKey()
 
         # get offsets in mask from output and target
         masked_offset_output = normalized_offset_output_batch[keypoint_mask_batch]
         masked_offset_target = stem_offset_target_batch[keypoint_mask_batch]
+
+        # debug output
+        print(torch.min(masked_offset_output))
+        print(torch.max(masked_offset_output))
+        print(torch.min(masked_offset_target))
+        print(torch.max(masked_offset_target))
 
         return self.criterion(masked_offset_output, masked_offset_target)
 

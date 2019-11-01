@@ -22,26 +22,27 @@ from training import LOGS_DIR, MODELS_DIR
 
 def main():
     learning_rate = 0.001
-    batch_size = 8
+    batch_size = 5
     num_epochs = 500
 
     # weighting of losses
-    semantic_loss_weight = 0.5
-    stem_loss_weight = 0.5
-    stem_classification_loss_weight = 0.5
-    stem_regression_loss_weight = 0.5
+    semantic_loss_weight = 0.3
+    stem_loss_weight = 0.7
+    stem_classification_loss_weight = 0.05
+    stem_regression_loss_weight = 0.95
 
     # class weights for semantic segmentation
-    weight_background = 0.1
-    weight_weed = 0.5
-    weight_sugar_beet = 0.3
+    weight_background = 0.05
+    weight_weed = 0.8
+    weight_sugar_beet = 0.15
 
     # class weights for stem keypoint detection
-    weight_stem_background = 0.01
-    weight_stem = 0.99
+    weight_stem_background = 0.1
+    weight_stem = 0.9
 
-    size_test_set = 25
-    weights_path = "simple_unet.pth"
+    size_test_set = 50
+    weights_path = None
+    # weights_path = "simple_unet.pth"
 
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -60,7 +61,8 @@ def main():
     data_loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=1, shuffle=False)
 
     model = SimpleUnet.from_config().to(device)
-    model = load_weights(model, weights_path)
+    if weights_path:
+        model = load_weights(model, weights_path)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -101,6 +103,9 @@ def main():
 
             # foward pass
             semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = model(input_batch)
+
+            print(semantic_output_batch.shape)
+            print(semantic_target_batch.shape)
 
             # compute losses
             semantic_loss = semantic_loss_weight*\
