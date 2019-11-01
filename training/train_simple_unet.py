@@ -104,9 +104,6 @@ def main():
             # foward pass
             semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = model(input_batch)
 
-            print(semantic_output_batch.shape)
-            print(semantic_target_batch.shape)
-
             # compute losses
             semantic_loss = semantic_loss_weight*\
                             semantic_loss_function(semantic_output_batch,
