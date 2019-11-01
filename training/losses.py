@@ -59,10 +59,10 @@ class StemRegressionLoss(nn.Module):
         masked_offset_target = stem_offset_target_batch[keypoint_mask_batch]
 
         # debug output
-        print(torch.min(masked_offset_output))
-        print(torch.max(masked_offset_output))
-        print(torch.min(masked_offset_target))
-        print(torch.max(masked_offset_target))
+        # print(torch.min(masked_offset_output))
+        # print(torch.max(masked_offset_output))
+        # print(torch.min(masked_offset_target))
+        # print(torch.max(masked_offset_target))
 
         return self.criterion(masked_offset_output, masked_offset_target)
 
