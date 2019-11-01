@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>tensorrt_test</name>
+  <version>0.1.0</version>
+  <description>Test ROS with tensorrt</description>
+  <maintainer email="s7jaquak@uni-bonn.de">Jan Quakernack</maintainer>
+  <license>TODO</license>
+  <author email="s7jaquak@uni-bonn.de">Jan Quakernack</author>
+
+  <depend>roscpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>cv_bridge</depend>
+  <depend>image_transport</depend>
+  <depend>message_filters</depend>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>messgae_generation</build_depend>
+
+  <exec_depend>message_runtime</exec_depend>
+
+  <test_depend>rosunit</test_depend>
+</package>

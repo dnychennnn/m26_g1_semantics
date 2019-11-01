@@ -44,7 +44,7 @@ def main():
     dataset = SugarBeetDataset.from_config()
 
     """ MODEL TESTING SNIPPET"""
-    test_input, test_target = dataset[0]
+    test_input, test_target, _, _ = dataset[0]
     test_input = test_input[None, ...].to(device)
     test_target = test_target[None, ...].to(device)
 
@@ -74,7 +74,7 @@ def main():
             print(class_confidences.cpu().detach().numpy().shape)
             cv_sugar_beet_confidence = class_confidences.cpu().detach().numpy()[0, 2, ...]
 
-            
+
             cv_sugar_beet_confidence = get_confidence_map(cv_sugar_beet_confidence)
             cv_target = test_target.cpu().detach().numpy()
             cv_target_sugar_beet = (255*(cv_target[0, ...]==2)).astype(np.uint8)
@@ -116,13 +116,13 @@ def main():
     scheduler = lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)  # decay LR by a factor of 0.5 every 30 epochs
 
     # criterion = nn.BCEWithLogitsLoss()
-    criterion = nn.CrossEntropyLoss(ignore_index=1)
+    criterion = nn.CrossEntropyLoss(ignore_index=3)
 
     for epoch in range(epochs):
         min_loss = 1.
         # train for one epoch, printing every 10 iterations
         for iter, batch in enumerate(data_loader):
-            inputs, targets = batch
+            inputs, targets, _, _ = batch
 
             optimizer.zero_grad()
 
@@ -146,7 +146,7 @@ def main():
     for iter, batch in enumerate(data_loader_test):
         inputs, targets = batch
         inputs = inputs.to(device)
-    
+
         with torch.no_grad():
             test_output = model(inputs)
             class_confidences = nn.functional.softmax(test_output, dim=1)
@@ -157,7 +157,7 @@ def main():
             cv_target = test_target.cpu().detach().numpy()
             cv_target_sugar_beet = (255*(cv_target[0, ...]==2)).astype(np.uint8)
             visualize_single_confidence(cv_input, cv_target_sugar_beet, cv_sugar_beet_confidence)
-            
+
 
 
 if __name__ == "__main__":

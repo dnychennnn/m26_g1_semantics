@@ -38,7 +38,7 @@ class ConvBlock(nn.Sequential):
           self.add_module('tanh', nn.Tanh())
       elif activation=='softmax':
           self.add_module('softmax', nn.Softmax(dim=1))
-      elif activation=='none' or activation==None:
+      elif activation is None or activation=='none':
           pass
       else:
           warnings.warn("Convolutional block with not-supported activation '{}'.".format(activation))

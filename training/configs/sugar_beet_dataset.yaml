@@ -27,6 +27,6 @@ suffix_nir_images: '.png'
 path_to_semantic_labels: 'sugar_beet_dataset/annotations/PNG/pixelwise/iMap/'
 suffix_semantic_labels: '_GroundTruth_iMap.png'
 
-path_to_stem_labels: 'sugar_beet_dataset/annotations/YAML/'
-suffix_stem_labels: '.yaml'
+path_to_yaml_annotations: 'sugar_beet_dataset/annotations/YAML/'
+suffix_yaml_annotations: '.yaml'
 

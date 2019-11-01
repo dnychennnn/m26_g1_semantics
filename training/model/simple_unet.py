@@ -54,7 +54,26 @@ class SimpleUnet(nn.Module):
                                     num_conv=num_conv_stem_decoder,
                                     dropout_rate=dropout_rate)
 
-        # final convolution of both heads to get right number of output dimensions
+        # final convolutional sequences
+        self.final_sequence_semantic = ConvSequence(in_channels=num_filters_semantic_decoder[-1],
+                                                    out_channels=num_filters_semantic_decoder[-1],
+                                                    num_conv_blocks=2,
+                                                    activation='leaky_relu',
+                                                    dropout_rate=None)
+
+        self.final_sequence_stem_keypoint = ConvSequence(in_channels=num_filters_stem_decoder[-1],
+                                                         out_channels=num_filters_stem_decoder[-1],
+                                                         num_conv_blocks=2,
+                                                         activation='leaky_relu',
+                                                         dropout_rate=None)
+
+        self.final_sequence_stem_offset = ConvSequence(in_channels=num_filters_stem_decoder[-1],
+                                                       out_channels=num_filters_stem_decoder[-1],
+                                                       num_conv_blocks=2,
+                                                       activation='leaky_relu',
+                                                       dropout_rate=None)
+
+        # final convolution with no activation to get right number of output dimensions
         self.final_conv_semantic = ConvBlock(in_channels=num_filters_semantic_decoder[-1],
                                              out_channels=3, # three classes: background, weed, sugar beet
                                              kernel_size=1,
@@ -62,23 +81,47 @@ class SimpleUnet(nn.Module):
                                              activation=None,
                                              dropout_rate=None)
 
-        self.final_conv_stem = ConvBlock(in_channels=num_filters_stem_decoder[-1],
-                                         out_channels=3, # three outputs: stem confidence, x offset, y offset
-                                         kernel_size=1,
-                                         padding=0,
-                                         activation=None,
-                                         dropout_rate=None)
+        self.final_conv_stem_keypoint = ConvBlock(in_channels=num_filters_stem_decoder[-1],
+                                                  out_channels=1, # one output: stem confidence
+                                                  kernel_size=1,
+                                                  padding=0,
+                                                  activation=None,
+                                                  dropout_rate=None)
+
+        self.final_conv_stem_offset = ConvBlock(in_channels=num_filters_stem_decoder[-1],
+                                                out_channels=2, # two outputs: offset x, offset y
+                                                kernel_size=1,
+                                                padding=0,
+                                                activation=None,
+                                                dropout_rate=None)
 
     def forward(self, x):
         x, skips = self.encoder(x)
 
         semantic_output = self.semantic_decoder(x, skips)
+        # print('semantic_output', semantic_output.shape)
+        semantic_output = self.final_sequence_semantic(semantic_output)
+        # print('semantic_output', semantic_output.shape)
         semantic_output = self.final_conv_semantic(semantic_output)
+        # print('semantic_output', semantic_output.shape)
 
         stem_output = self.stem_decoder(x, skips)
-        stem_output = self.final_conv_semantic(stem_output)
+        # print('stem_output', stem_output.shape)
 
-        return semantic_output, stem_output
+        stem_keypoint_output = self.final_sequence_stem_keypoint(stem_output)
+        # print('stem_keypoint_output', stem_keypoint_output.shape)
+        stem_keypoint_output = self.final_conv_stem_keypoint(stem_keypoint_output)
+        # print('stem_keypoint_output', stem_keypoint_output.shape)
+
+        stem_offset_output = self.final_sequence_stem_offset(stem_output)
+        # print('stem_offset_output', stem_offset_output.shape)
+        stem_offset_output = self.final_conv_stem_offset(stem_offset_output)
+        # print('stem_offset_output', stem_offset_output.shape)
+
+        # stem_keypoint_output = stem_output[:, 0, ...]
+        # stem_offset_output = stem_output[:, 1:, ...]
+
+        return semantic_output, stem_keypoint_output, stem_offset_output
 
 
 class Encoder(nn.Module):
