@@ -19,6 +19,8 @@ from training.losses import StemClassificationLoss, StemRegressionLoss
 from training import vis
 from training import LOGS_DIR, MODELS_DIR
 
+from utils import intersectionAndUnion, accuracy
+
 
 def main():
     learning_rate = 0.001
@@ -34,7 +36,10 @@ def main():
     # class weights for semantic segmentation
     weight_background = 0.05
     weight_weed = 0.8
-    weight_sugar_beet = 0.15
+    weight_sugar_beet = 0.15)
+    acc = float(acc_sum) / (valid_sum + 1e-10)
+    return acc, valid_sum
+
 
     # class weights for stem keypoint detection
     weight_stem_background = 0.1
@@ -129,6 +134,11 @@ def main():
 
             loss.backward()
             optimizer.step()
+
+            #compute IoU, Accuracy
+            intersectionAndUnion(semantic_output_batch, semantic_target_batch, 3)
+            
+
 
         # end of epoch
         print('End of epoch. Make checkpoint.')
