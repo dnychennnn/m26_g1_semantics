@@ -1,6 +1,8 @@
 from matplotlib import pyplot as plot
 import numpy as np
 import cv2
+import torch
+
 
 def visualize(image, mask):
     plot.figure(1)
@@ -26,6 +28,9 @@ def visualize_single_confidence(cv_input, cv_target, cv_confidence):
     cv2.imshow('sugar beet', cv_confidence)
     cv2.waitKey(1)
 
+def make_classification_map(pred_tensor):
+    _, indicies = torch.max(pred_tensor, 0)
+    return indicies
 
 def intersectionAndUnion(imPred, imLab, numClass):
     imPred = np.asarray(imPred).copy()
