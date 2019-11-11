@@ -19,7 +19,7 @@ from training.losses import StemClassificationLoss, StemRegressionLoss
 from training import vis
 from training import LOGS_DIR, MODELS_DIR
 
-from utils import intersectionAndUnion, accuracy
+from utils import intersectionAndUnion, accuracy, make_classification_map
 
 
 def main():
@@ -36,9 +36,7 @@ def main():
     # class weights for semantic segmentation
     weight_background = 0.05
     weight_weed = 0.8
-    weight_sugar_beet = 0.15)
-    acc = float(acc_sum) / (valid_sum + 1e-10)
-    return acc, valid_sum
+    weight_sugar_beet = 0.15
 
 
     # class weights for stem keypoint detection
@@ -52,7 +50,6 @@ def main():
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
     dataset = SugarBeetDataset.from_config()
-
     # split into train and test set
     indices = torch.randperm(len(dataset)).tolist()
     dataset_train = torch.utils.data.Subset(dataset, indices)
@@ -135,9 +132,10 @@ def main():
             loss.backward()
             optimizer.step()
 
-            #compute IoU, Accuracy
-            intersectionAndUnion(semantic_output_batch, semantic_target_batch, 3)
-            
+            #compute IoU on the first slice of batch
+            cls_map = make_classification_map(semantic_output_batch[0])
+            intersection, union = intersectionAndUnion(cls_map.cpu().detach().numpy(), semantic_target_batch[0].cpu().detach().numpy(), 3)
+            print('  IoU: {:04f}'.format(np.sum(intersection) / np.sum(union)))
 
 
         # end of epoch
