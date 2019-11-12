@@ -1,5 +1,7 @@
 # training parameters
 
+batch_size: 5
+input_channels: 4
 input_height: 322
 input_width: 432
 
@@ -7,7 +9,6 @@ target_height: 322
 target_width: 432
 
 learning_rate: 0.001
-batch_size: 5
 num_epochs: 500
 
 # weighting of losses

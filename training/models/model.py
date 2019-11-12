@@ -22,19 +22,20 @@ from training import MODELS_DIR
 class Model:
 
     @classmethod
-    def by_name(cls, architecture_name, path_to_weights_file=None, verbose=False):
+    def by_name(cls, architecture_name, phase, path_to_weights_file=None, verbose=False):
         """Get one of our models by its name.
 
         Args:
             architecture_name (str): Currently supported 'fcn' and 'simple_unet'.
+            phase (str): 'training' or 'deployment'
             path_to_weights_file (str or pathlib.Path): Weights as .pth file to load.
             Assumed to be in MODELS_DIR/path_to_weights_file.
             verbose (bool): Print some information.
         """
         if architecture_name=='fcn':
-            model = FCN.from_config()
+            model = FCN.from_config(phase=phase)
         elif architecture_name=='simple_unet':
-            model = SimpleUnet.from_config()
+            model = SimpleUnet.from_config(phase=phase)
         else:
             raise ValueError("Architechture '{}' is not supported.".format(architecture_name))
 

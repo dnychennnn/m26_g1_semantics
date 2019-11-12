@@ -63,7 +63,7 @@ def main():
     data_loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size, shuffle=True)
     data_loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=1, shuffle=False)
 
-    model = Model.by_name(architecture_name, path_to_weights_file, verbose=True).to(device)
+    model = Model.by_name(architecture_name, phase='training', path_to_weights_file=path_to_weights_file, verbose=True).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 

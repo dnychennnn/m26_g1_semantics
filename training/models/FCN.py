@@ -24,7 +24,11 @@ def get_upsampling_weight(in_channels, out_channels, kernel_size):
 class FCN(nn.Module):
 
     @classmethod
-    def from_config(cls):
+    def from_config(cls, phase):
+        """
+        Args:
+            phase (str): 'training' or 'deployment'
+        """
         config = load_config('fcn.yaml')
         return FCN(**config)
 

@@ -14,9 +14,10 @@ from training import MODELS_DIR, load_config
 @click.argument('architecture_name', type=str)
 @click.argument('path_to_weights_file', type=click.Path(dir_okay=False, file_okay=True))
 @click.option('-o', '--path-to-output-file', type=click.Path(dir_okay=False, file_okay=True), default=None)
-def export_model_as_onnx(architecture_name, path_to_weights_file, path_to_output_file):
+@click.option('-d', '--device', type=str, default='cuda')
+def export_model_as_onnx(architecture_name, path_to_weights_file, path_to_output_file, device):
     try:
-        model = Model.by_name(architecture_name, path_to_weights_file=path_to_weights_file, verbose=True)
+        model = Model.by_name(architecture_name, phase='deployment', path_to_weights_file=path_to_weights_file, verbose=True)
     except ValueError:
         click.echo("Architechture '{}' is not supported.".format(architecture_name), err=True)
 
@@ -34,10 +35,11 @@ def export_model_as_onnx(architecture_name, path_to_weights_file, path_to_output
     config = load_config('deployment.yaml')
     input_width = config['input_width']
     input_height = config['input_height']
-    num_channels = config['num_channels']
+    input_channels = config['input_channels']
     batch_size = config['batch_size']
 
-    dummy_input = torch.randn(batch_size, num_channels, input_height, input_width, device='cuda')
+    model = model.to(device)
+    dummy_input = torch.randn(batch_size, input_channels, input_height, input_width, device=device)
     torch.onnx.export(model, dummy_input, str(path_to_output_file), verbose=True)
 
 
