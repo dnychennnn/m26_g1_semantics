@@ -3,3 +3,4 @@ training/dataset/
 pretrain_try.py
 **/.vscode/**/*
 **/__pycache__/**/*
+**/build/*
