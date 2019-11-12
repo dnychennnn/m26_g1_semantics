@@ -19,7 +19,7 @@ from training.losses import StemClassificationLoss, StemRegressionLoss
 from training import vis
 from training import LOGS_DIR, MODELS_DIR
 
-from utils import intersectionAndUnion, accuracy, make_classification_map
+from utils import intersectionAndUnion, accuracy, make_classification_map, computeIoUAndAcc
 
 
 def main():
@@ -132,10 +132,10 @@ def main():
             loss.backward()
             optimizer.step()
 
-            #compute IoU on the first slice of batch
-            cls_map = make_classification_map(semantic_output_batch[0])
-            intersection, union = intersectionAndUnion(cls_map.cpu().detach().numpy(), semantic_target_batch[0].cpu().detach().numpy(), 3)
-            print('  IoU: {:04f}'.format(np.sum(intersection) / np.sum(union)))
+            #compute IoU and Accuracy on the first slice of batch
+            IoU, acc = computeIoUAndAcc(semantic_output_batch[0], semantic_target_batch[0])
+            print('  IoU: {:04f}'.format(IoU))
+            print('  Accuracy: {:04f}'.format(acc))
 
 
         # end of epoch
