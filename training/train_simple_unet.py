@@ -19,7 +19,7 @@ from training.losses import StemClassificationLoss, StemRegressionLoss
 from training import vis
 from training import LOGS_DIR, MODELS_DIR
 
-from utils import intersectionAndUnion, accuracy, make_classification_map, computeIoUAndAcc
+from utils import intersection_and_union, accuracy, make_classification_map, compute_IoU_and_Acc
 
 
 def main():
@@ -133,7 +133,7 @@ def main():
             optimizer.step()
 
             #compute IoU and Accuracy on the first slice of batch
-            IoU, acc = computeIoUAndAcc(semantic_output_batch[0], semantic_target_batch[0])
+            IoU, acc = compute_IoU_and_Acc(semantic_output_batch[0], semantic_target_batch[0])
             print('  IoU: {:04f}'.format(IoU))
             print('  Accuracy: {:04f}'.format(acc))
 
