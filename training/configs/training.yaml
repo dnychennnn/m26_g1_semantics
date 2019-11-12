@@ -1,0 +1,31 @@
+# training parameters
+
+input_height: 322
+input_width: 432
+
+target_height: 322
+target_width: 432
+
+learning_rate: 0.001
+batch_size: 5
+num_epochs: 500
+
+# weighting of losses
+semantic_loss_weight: 0.3
+stem_loss_weight: 0.7
+stem_classification_loss_weight: 0.05
+stem_regression_loss_weight: 0.95
+
+# class weights for semantic segmentation
+weight_background: 0.05
+weight_weed: 0.8
+weight_sugar_beet: 0.15
+
+# class weights for stem keypoint detection
+weight_stem_background: 0.1
+weight_stem: 0.9
+
+size_test_set: 50
+
+architecture_name: 'simple_unet' # 'fcn', 'simple_unet'
+weights_path: None # 'simple_unet.pth'
