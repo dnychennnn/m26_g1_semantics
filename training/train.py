@@ -1,4 +1,4 @@
-from model.FCN import FCN
+from models.FCN import FCN
 import torch
 import torch.nn as nn
 import torch.optim as optim
