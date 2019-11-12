@@ -1,3 +1,9 @@
+"""Some helper functions.
+
+
+Note: This module contains parts, which were written by  https://github.com/CSAILVision/semantic-segmentation-pytorch/blob/master/utils.py
+"""
+
 from matplotlib import pyplot as plot
 import numpy as np
 import cv2
@@ -32,15 +38,9 @@ def make_classification_map(pred_tensor):
     _, indicies = torch.max(pred_tensor, 0)
     return indicies
 
-def intersectionAndUnion(imPred, imLab, numClass):
+def intersection_and_union(imPred, imLab, numClass):
     imPred = np.asarray(imPred).copy()
     imLab = np.asarray(imLab).copy()
-
-    imPred += 1
-    imLab += 1
-    # Remove classes from unlabeled pixels in gt image.
-    # We should not penalize detections in unlabeled portions of the image.
-    imPred = imPred * (imLab > 0)
 
     # Compute area intersection:
     intersection = imPred * (imPred == imLab)
@@ -59,13 +59,13 @@ def accuracy(preds, label):
     acc_sum = (valid * (preds == label)).sum()
     valid_sum = valid.sum()
     acc = float(acc_sum) / (valid_sum + 1e-10)
-    return acc, valid_sum
+    return acc
 
-def computeIoUAndAcc(preds, labels):
+def compute_IoU_and_Acc(preds, labels):
     cls_map = make_classification_map(preds)
     cls_map = cls_map.cpu().detach().numpy()
     label_map = labels.cpu().detach().numpy()
-    intersection, union = intersectionAndUnion(cls_map, label_map, 3)
+    intersection, union = intersection_and_union(cls_map, label_map, 3)
     IoU = np.sum(intersection) / np.sum(union)
     acc = accuracy(cls_map, label_map)
 
