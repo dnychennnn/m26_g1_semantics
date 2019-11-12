@@ -19,7 +19,7 @@ from training.losses import StemClassificationLoss, StemRegressionLoss
 from training import vis
 from training import LOGS_DIR, MODELS_DIR
 
-from utils import intersection_and_union, accuracy, make_classification_map, compute_IoU_and_Acc
+from utils import intersection_and_union, accuracy, make_classification_map, compute_mIoU_and_Acc
 
 
 def main():
@@ -122,7 +122,7 @@ def main():
 
             stem_loss = stem_classification_loss+stem_regression_loss
             loss = semantic_loss+stem_loss
-
+             
             print('  loss: {:04f}'.format(loss.item()))
             print('  semantic_loss: {:04f}'.format(semantic_loss.item()))
             print('  stem_loss: {:04f}'.format(stem_loss.item()))
@@ -132,11 +132,10 @@ def main():
             loss.backward()
             optimizer.step()
 
-            #compute IoU and Accuracy on the first slice of batch
-            IoU, acc = compute_IoU_and_Acc(semantic_output_batch[0], semantic_target_batch[0])
-            print('  IoU: {:04f}'.format(IoU))
-            print('  Accuracy: {:04f}'.format(acc))
-
+	#compute IoU and Accuracy at the end of the epoch over the last batch
+        mIoU, acc = compute_mIoU_and_Acc(semantic_output_batch, semantic_target_batch, 3)
+	print()
+        print('[Training] mIoU: {:04f}, Accuracy: {:04f}'.format(mIoU, acc))
 
         # end of epoch
         print('End of epoch. Make checkpoint.')
@@ -168,7 +167,7 @@ def main():
 
             # foward pass
             semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = model(input_batch)
-
+            
             path_for_plots = examples_dir/'sample_{:02d}'.format(batch_index)
             save_plots(path_for_plots,
                        input_slice=input_batch[0],
@@ -180,6 +179,10 @@ def main():
                        std_rgb=dataset.std_rgb,
                        mean_nir=dataset.mean_nir,
                        std_nir=dataset.std_nir)
+
+        #compute IoU and Accuracy on the last batch of testing set
+        mIoU, acc = compute_mIoU_and_Acc(semantic_output_batch, semantic_target_batch, 3)
+        print('[Testing] mIoU: {:04f}, Accuracy: {:04f}'.format(mIoU, acc))
 
 
 def make_checkpoint(run_name, log_dir, epoch, model):

@@ -35,7 +35,7 @@ def visualize_single_confidence(cv_input, cv_target, cv_confidence):
     cv2.waitKey(1)
 
 def make_classification_map(pred_tensor):
-    _, indicies = torch.max(pred_tensor, 0)
+    _, indicies = torch.max(pred_tensor, 1)
     return indicies
 
 def intersection_and_union(imPred, imLab, numClass):
@@ -46,7 +46,7 @@ def intersection_and_union(imPred, imLab, numClass):
     intersection = imPred * (imPred == imLab)
     (area_intersection, _) = np.histogram(
         intersection, bins=numClass, range=(1, numClass))
-
+    
     # Compute area union:
     (area_pred, _) = np.histogram(imPred, bins=numClass, range=(1, numClass))
     (area_lab, _) = np.histogram(imLab, bins=numClass, range=(1, numClass))
@@ -55,19 +55,20 @@ def intersection_and_union(imPred, imLab, numClass):
     return (area_intersection, area_union)
 
 def accuracy(preds, label):
-    valid = (label >= 0)
+    valid = (label > 0)  # ignore the dominant 0 labels
     acc_sum = (valid * (preds == label)).sum()
     valid_sum = valid.sum()
     acc = float(acc_sum) / (valid_sum + 1e-10)
     return acc
 
-def compute_IoU_and_Acc(preds, labels):
+def compute_mIoU_and_Acc(preds, labels, numClass):
     cls_map = make_classification_map(preds)
     cls_map = cls_map.cpu().detach().numpy()
     label_map = labels.cpu().detach().numpy()
-    intersection, union = intersection_and_union(cls_map, label_map, 3)
-    IoU = np.sum(intersection) / (np.sum(union) + 1e-10)
+    intersection, union = intersection_and_union(cls_map, label_map, numClass)
+ 
+    mIoU = np.mean(intersection / (union + 1e-10)) 
     acc = accuracy(cls_map, label_map)
 
-    return IoU, acc
+    return mIoU, acc
 
