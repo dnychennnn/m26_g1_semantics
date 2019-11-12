@@ -27,5 +27,5 @@ weight_stem: 0.9
 
 size_test_set: 50
 
-architecture_name: 'simple_unet' # 'fcn', 'simple_unet'
-weights_path: None # 'simple_unet.pth'
+architecture_name: None # 'fcn', 'simple_unet'
+path_to_weights_file: None # 'simple_unet.pth'
