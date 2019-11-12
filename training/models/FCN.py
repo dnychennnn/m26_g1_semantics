@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+from training import CONFIGS_DIR, load_config
+
+
 def get_upsampling_weight(in_channels, out_channels, kernel_size):
     """Make a 2D bilinear kernel suitable for upsampling"""
     factor = (kernel_size + 1) // 2
@@ -19,6 +22,12 @@ def get_upsampling_weight(in_channels, out_channels, kernel_size):
 
 
 class FCN(nn.Module):
+
+    @classmethod
+    def from_config(cls):
+        config = load_config('fcn.yaml')
+        return FCN(**config)
+
 
     def __init__(self, n_class):
         super(FCN, self).__init__()

@@ -10,7 +10,7 @@ import torch
 from torch import nn
 
 from training import CONFIGS_DIR, load_config
-from training.model.layers import ConvBlock, ConvSequence
+from training.models.layers import ConvBlock, ConvSequence
 
 
 class SimpleUnet(nn.Module):
