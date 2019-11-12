@@ -66,7 +66,7 @@ def compute_IoU_and_Acc(preds, labels):
     cls_map = cls_map.cpu().detach().numpy()
     label_map = labels.cpu().detach().numpy()
     intersection, union = intersection_and_union(cls_map, label_map, 3)
-    IoU = np.sum(intersection) / np.sum(union)
+    IoU = np.sum(intersection) / (np.sum(union) + 1e-10)
     acc = accuracy(cls_map, label_map)
 
     return IoU, acc
