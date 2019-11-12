@@ -60,3 +60,14 @@ def accuracy(preds, label):
     valid_sum = valid.sum()
     acc = float(acc_sum) / (valid_sum + 1e-10)
     return acc, valid_sum
+
+def computeIoUAndAcc(preds, labels):
+    cls_map = make_classification_map(preds)
+    cls_map = cls_map.cpu().detach().numpy()
+    label_map = labels.cpu().detach().numpy()
+    intersection, union = intersectionAndUnion(cls_map, label_map, 3)
+    IoU = np.sum(intersection) / np.sum(union)
+    acc = accuracy(cls_map, label_map)
+
+    return IoU, acc
+
