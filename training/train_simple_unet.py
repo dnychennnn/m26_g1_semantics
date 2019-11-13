@@ -84,7 +84,7 @@ def main():
 
     for epoch_index in range(num_epochs):
 
-        accumulated_confusion_matrix = np.zeros((3,3))
+        accumulated_confusion_matrix = np.zeros((4,4))
 
         for batch_index, batch in enumerate(data_loader_train):
             print('Train batch {}/{} in epoch {}/{}.'.format(batch_index, len(data_loader_train), epoch_index, num_epochs))
@@ -161,7 +161,7 @@ def main():
         averaged_mIoU = 0
         averaged_acc = 0
 
-        test_accumulated_confusion_matrix = np.zeros((3,3))
+        test_accumulated_confusion_matrix = np.zeros((4,4))
         for batch_index, batch in enumerate(data_loader_test):
             model.eval()
 
