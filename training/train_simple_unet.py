@@ -205,7 +205,7 @@ def main():
             #accumulate confusion matrix
             test_accumulated_confusion_matrix += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
         
-        plot_confusion_matrix(test_accumulated_confusion_matrix, classes=['background', 'weed', 'sugar beet'], nomalize=True, title='test_'+str(epoch))
+        plot_confusion_matrix(test_accumulated_confusion_matrix, classes=['background', 'weed', 'sugar beet'], normalize=True, title='test_'+str(epoch_index))
         print('[Testing] Averaged mIoU: {:04f}, Averaged Accuracy: {:04f}'.format(np.mean(averaged_mIoU), np.mean(averaged_acc)))
 
 
