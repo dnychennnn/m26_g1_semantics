@@ -82,7 +82,7 @@ def compute_confusion_matrix(preds, labels):
 
     return cm
 
-def plot_confusion_matrix(cm, classes,
+def plot_confusion_matrix(path, cm, classes,
                         normalize=False,
                         title=None,
                         cmap=plt.cm.Blues):
@@ -118,7 +118,7 @@ def plot_confusion_matrix(cm, classes,
                     ha="center", va="center",
                     color="white" if cm[i, j] > thresh else "black")
 
-    cm_dir_path = LOGS_DIR/'cm'
+    cm_dir_path = path/'cm'
     if not cm_dir_path.exists():
         cm_dir_path.mkdir()
     cm_path = cm_dir_path/(str(title)+'.png')

@@ -48,7 +48,7 @@ def main():
     weights_path = None
     # weights_path = "simple_unet.pth"
 
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    device = torch.device('cuda:1') if torch.cuda.is_available() else torch.device('cpu')
 
     dataset = SugarBeetDataset.from_config()
     # split into train and test set
@@ -144,7 +144,7 @@ def main():
 
         print('Save Confusion Matrix ...')
         # save accumulated cm
-        plot_confusion_matrix(accumulated_confusion_matrix, classes=['background', 'weed', 'sugar beet'], normalize=True, title='train_'+str(epoch_index))
+        plot_confusion_matrix(log_dir, accumulated_confusion_matrix, classes=['background', 'weed', 'sugar beet'], normalize=True, title='train_'+str(epoch_index))
         
 	    #compute IoU and Accuracy at the end of the epoch over the last batch
         mIoU, acc = compute_mIoU_and_Acc(semantic_output_batch, semantic_target_batch, 3)
@@ -205,7 +205,7 @@ def main():
             #accumulate confusion matrix
             test_accumulated_confusion_matrix += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
         
-        plot_confusion_matrix(test_accumulated_confusion_matrix, classes=['background', 'weed', 'sugar beet'], normalize=True, title='test_'+str(epoch_index))
+        plot_confusion_matrix(log_dir, test_accumulated_confusion_matrix, classes=['background', 'weed', 'sugar beet'], normalize=True, title='test_'+str(epoch_index))
         print('[Testing] Averaged mIoU: {:04f}, Averaged Accuracy: {:04f}'.format(np.mean(averaged_mIoU), np.mean(averaged_acc)))
 
 
