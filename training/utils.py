@@ -4,10 +4,12 @@
 Note: This module contains parts, which were written by  https://github.com/CSAILVision/semantic-segmentation-pytorch/blob/master/utils.py
 """
 
-from matplotlib import pyplot as plot
+from matplotlib import pyplot as plt
 import numpy as np
 import cv2
 import torch
+from sklearn.metrics import confusion_matrix
+from training import LOGS_DIR
 
 
 def visualize(image, mask):
@@ -71,4 +73,49 @@ def compute_mIoU_and_Acc(preds, labels, numClass):
     acc = accuracy(cls_map, label_map)
 
     return mIoU, acc
+
+def compute_confusion_matrix(preds, labels):
+    '''Note: the input will be a batch
+    '''
+    preds = preds.cpu().detach().numpy()
+    labels = labels.cpu().detach().numpy()
+
+    cm = np.zeros((3, 3))
+    for p, l in zip(preds, labels):
+        cm += confusion_matrix(p, l)
+
+    return cm
+
+def plot_confusion_matrix(cm, classes,
+                        normalize=False,
+                        title=None,
+                        cmap=plt.cm.Blues):
+
+    fig, ax = plt.subplots()
+    im = ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    ax.figure.colorbar(im, ax=ax)
+    # We want to show all ticks...
+    ax.set(xticks=np.arange(cm.shape[1]),
+        yticks=np.arange(cm.shape[0]),
+        # ... and label them with the respective list entries
+        xticklabels=classes, yticklabels=classes,
+        title=title,
+        ylabel='True label',
+        xlabel='Predicted label')
+
+    # Rotate the tick labels and set their alignment.
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
+            rotation_mode="anchor")
+
+    # Loop over data dimensions and create text annotations.
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            ax.text(j, i, format(cm[i, j], fmt),
+                    ha="center", va="center",
+                    color="white" if cm[i, j] > thresh else "black")
+    fig.tight_layout()
+    fig.savefig(LOGS_DIR + 'cm/' + title + '.png')
+
 
