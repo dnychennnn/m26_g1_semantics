@@ -19,7 +19,8 @@ from training.losses import StemClassificationLoss, StemRegressionLoss
 from training import vis
 from training import LOGS_DIR, MODELS_DIR
 
-from utils import intersection_and_union, accuracy, make_classification_map, compute_mIoU_and_Acc
+from utils import intersection_and_union, accuracy, make_classification_map, compute_mIoU_and_Acc, compute_confusion_matrix, plot_confusion_matrix
+import matplotlib.pyplot as plt
 
 
 def main():
@@ -80,7 +81,11 @@ def main():
     if not log_dir.exists():
         log_dir.mkdir()
 
+
     for epoch_index in range(num_epochs):
+
+        accumulated_confusion_matrix = np.zeros((3,3))
+
         for batch_index, batch in enumerate(data_loader_train):
             print('Train batch {}/{} in epoch {}/{}.'.format(batch_index, len(data_loader_train), epoch_index, num_epochs))
 
@@ -122,7 +127,7 @@ def main():
 
             stem_loss = stem_classification_loss+stem_regression_loss
             loss = semantic_loss+stem_loss
-             
+            
             print('  loss: {:04f}'.format(loss.item()))
             print('  semantic_loss: {:04f}'.format(semantic_loss.item()))
             print('  stem_loss: {:04f}'.format(stem_loss.item()))
@@ -132,9 +137,16 @@ def main():
             loss.backward()
             optimizer.step()
 
-	#compute IoU and Accuracy at the end of the epoch over the last batch
+
+            # accumulate confusion matrix
+            accumulated_confusion_matrix += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
+
+        # save accumulated cm
+        plot_confusion_matrix(accumulated_confusion_matrix, 3, normalization=True, title=str(epoch_index))
+        
+	    #compute IoU and Accuracy at the end of the epoch over the last batch
         mIoU, acc = compute_mIoU_and_Acc(semantic_output_batch, semantic_target_batch, 3)
-	print()
+
         print('[Training] mIoU: {:04f}, Accuracy: {:04f}'.format(mIoU, acc))
 
         # end of epoch
@@ -146,6 +158,10 @@ def main():
         if not examples_dir.exists():
             examples_dir.mkdir()
 
+        averaged_mIoU = 0
+        averaged_acc = 0
+
+        test_accumulated_confusion_matrix = np.zeros((3,3))
         for batch_index, batch in enumerate(data_loader_test):
             model.eval()
 
@@ -180,9 +196,15 @@ def main():
                        mean_nir=dataset.mean_nir,
                        std_nir=dataset.std_nir)
 
-        #compute IoU and Accuracy on the last batch of testing set
-        mIoU, acc = compute_mIoU_and_Acc(semantic_output_batch, semantic_target_batch, 3)
-        print('[Testing] mIoU: {:04f}, Accuracy: {:04f}'.format(mIoU, acc))
+            #compute IoU and Accuracy over every batch
+            mIoU, acc = compute_mIoU_and_Acc(semantic_output_batch, semantic_target_batch, 3)
+            averaged_mIoU += mIoU
+            averaged_acc  += acc
+            #accumulate confusion matrix
+            test_accumulated_confusion_matrix += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
+        
+        plot_confusion_matrix(test_accumulated_confusion_matrix, 3, nomalize=True, title=str(epoch))
+        print('[Testing] Averaged mIoU: {:04f}, Averaged Accuracy: {:04f}'.format(np.mean(averaged_mIoU), np.mean(averaged_acc)))
 
 
 def make_checkpoint(run_name, log_dir, epoch, model):
