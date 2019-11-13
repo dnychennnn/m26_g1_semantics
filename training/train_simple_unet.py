@@ -163,7 +163,7 @@ def main():
         averaged_mIoU = 0
         averaged_acc = 0
 
-        test_accumulated_confusion_matrix = np.zeros((4,4))
+        test_accumulated_confusion_matrix = np.zeros((3,3))
         for batch_index, batch in enumerate(data_loader_test):
             model.eval()
 
