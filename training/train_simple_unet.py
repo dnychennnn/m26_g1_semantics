@@ -84,7 +84,7 @@ def main():
 
     for epoch_index in range(num_epochs):
 
-        accumulated_confusion_matrix = np.zeros((4,4))
+        accumulated_confusion_matrix = np.zeros((3,3))
 
         for batch_index, batch in enumerate(data_loader_train):
             print('Train batch {}/{} in epoch {}/{}.'.format(batch_index, len(data_loader_train), epoch_index, num_epochs))
@@ -141,8 +141,10 @@ def main():
             # accumulate confusion matrix
             accumulated_confusion_matrix += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
 
+
+        print('Save Confusion Matrix ...')
         # save accumulated cm
-        plot_confusion_matrix(accumulated_confusion_matrix, 3, normalization=True, title=str(epoch_index))
+        plot_confusion_matrix(accumulated_confusion_matrix, classes=['background', 'weed', 'sugar beet'], normalize=True, title='train_'+str(epoch_index))
         
 	    #compute IoU and Accuracy at the end of the epoch over the last batch
         mIoU, acc = compute_mIoU_and_Acc(semantic_output_batch, semantic_target_batch, 3)
@@ -203,7 +205,7 @@ def main():
             #accumulate confusion matrix
             test_accumulated_confusion_matrix += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
         
-        plot_confusion_matrix(test_accumulated_confusion_matrix, 3, nomalize=True, title=str(epoch))
+        plot_confusion_matrix(test_accumulated_confusion_matrix, classes=['background', 'weed', 'sugar beet'], nomalize=True, title='test_'+str(epoch))
         print('[Testing] Averaged mIoU: {:04f}, Averaged Accuracy: {:04f}'.format(np.mean(averaged_mIoU), np.mean(averaged_acc)))
 
 
