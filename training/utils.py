@@ -77,12 +77,9 @@ def compute_mIoU_and_Acc(preds, labels, numClass):
 def compute_confusion_matrix(preds, labels):
     '''Note: the input will be a batch
     '''
-    preds = preds.cpu().detach().numpy()
+    preds = make_classification_map(preds).cpu().detach().numpy()
     labels = labels.cpu().detach().numpy()
-
-    cm = np.zeros((3, 3))
-    for p, l in zip(preds, labels):
-        cm += confusion_matrix(p, l)
+    cm = confusion_matrix(preds.flatten(), labels.flatten(), labels=[0,1,2,3])
 
     return cm
 
