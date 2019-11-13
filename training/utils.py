@@ -11,7 +11,6 @@ import torch
 from sklearn.metrics import confusion_matrix
 from training import LOGS_DIR
 
-
 def visualize(image, mask):
     plot.figure(1)
     plot.subplot(211)
@@ -79,7 +78,7 @@ def compute_confusion_matrix(preds, labels):
     '''
     preds = make_classification_map(preds).cpu().detach().numpy()
     labels = labels.cpu().detach().numpy()
-    cm = confusion_matrix(preds.flatten(), labels.flatten(), labels=[0,1,2,3])
+    cm = confusion_matrix(preds.flatten(), labels.flatten(), labels=[0,1,2])
 
     return cm
 
@@ -87,22 +86,28 @@ def plot_confusion_matrix(cm, classes,
                         normalize=False,
                         title=None,
                         cmap=plt.cm.Blues):
+    
+    accuracy = np.trace(cm) / np.sum(cm).astype('float')
+    misclass = 1 - accuracy
+
+    if normalize:
+        cm = cm.astype('float') / (cm.sum(axis=1)[:, np.newaxis] + 1e-10)
 
     fig, ax = plt.subplots()
-    im = ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    im = ax.imshow(cm, interpolation='nearest', cmap=cmap)
     ax.figure.colorbar(im, ax=ax)
     # We want to show all ticks...
     ax.set(xticks=np.arange(cm.shape[1]),
-        yticks=np.arange(cm.shape[0]),
-        # ... and label them with the respective list entries
-        xticklabels=classes, yticklabels=classes,
-        title=title,
-        ylabel='True label',
-        xlabel='Predicted label')
+           yticks=np.arange(cm.shape[0]),
+           # ... and label them with the respective list entries
+           xticklabels=classes, yticklabels=classes,
+           title='Confusion Matrix: ' + title,
+           ylabel='True label',
+           xlabel='Predicted label')
 
     # Rotate the tick labels and set their alignment.
-    plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
-            rotation_mode="anchor")
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", va="center",
+             rotation_mode="anchor")
 
     # Loop over data dimensions and create text annotations.
     fmt = '.2f' if normalize else 'd'
@@ -112,7 +117,12 @@ def plot_confusion_matrix(cm, classes,
             ax.text(j, i, format(cm[i, j], fmt),
                     ha="center", va="center",
                     color="white" if cm[i, j] > thresh else "black")
-    fig.tight_layout()
-    fig.savefig(LOGS_DIR + 'cm/' + title + '.png')
 
-
+    cm_dir_path = LOGS_DIR/'cm'
+    if not cm_dir_path.exists():
+        cm_dir_path.mkdir()
+    cm_path = cm_dir_path/(str(title)+'.png')
+    
+    ax.set_ylim(len(cm)-0.5, -0.5)
+    fig.savefig(str(cm_path), bbox_inches='tight')
+    plt.close('all')
