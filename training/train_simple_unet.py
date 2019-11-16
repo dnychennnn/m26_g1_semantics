@@ -206,7 +206,7 @@ def main():
             test_accumulated_confusion_matrix += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
         
         plot_confusion_matrix(log_dir, test_accumulated_confusion_matrix, classes=['background', 'weed', 'sugar beet'], normalize=True, title='test_'+str(epoch_index))
-        print('[Testing] Averaged mIoU: {:04f}, Averaged Accuracy: {:04f}'.format(np.mean(averaged_mIoU), np.mean(averaged_acc)))
+        print('[Testing] Averaged mIoU: {:04f}, Averaged Accuracy: {:04f}'.format( averaged_mIoU / size_test_set , averaged_acc / size_test_set))
 
 
 def make_checkpoint(run_name, log_dir, epoch, model):
