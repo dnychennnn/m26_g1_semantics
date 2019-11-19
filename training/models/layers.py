@@ -13,20 +13,20 @@ import warnings
 
 class ConvBlock(nn.Sequential):
   def __init__(self,
-               in_channels,
-               out_channels,
+               input_channels,
+               output_channels,
                kernel_size,
                padding,
                activation,
                dropout_rate):
       super().__init__()
-      self.add_module('conv', nn.Conv2d(in_channels,
-                                        out_channels=out_channels,
+      self.add_module('conv', nn.Conv2d(input_channels,
+                                        out_channels=output_channels,
                                         kernel_size=kernel_size,
                                         stride=1,
                                         padding=padding,
                                         bias=True))
-      self.add_module('batch_norm', nn.BatchNorm2d(out_channels))
+      self.add_module('batch_norm', nn.BatchNorm2d(output_channels))
 
       if activation=='relu':
           self.add_module('relu', nn.ReLU())
@@ -49,8 +49,8 @@ class ConvBlock(nn.Sequential):
 
 class ConvSequence(nn.Sequential):
     def __init__(self,
-                 in_channels,
-                 out_channels,
+                 input_channels,
+                 output_channels,
                  num_conv_blocks,
                  activation,
                  dropout_rate):
@@ -58,11 +58,11 @@ class ConvSequence(nn.Sequential):
 
       for index in range(num_conv_blocks):
           self.add_module('conv_{}'.format(index),
-                          ConvBlock(in_channels=in_channels,
-                                    out_channels=out_channels,
+                          ConvBlock(input_channels=input_channels,
+                                    output_channels=output_channels,
                                     kernel_size=3,
                                     padding=1,
                                     dropout_rate=dropout_rate,
                                     activation=activation))
-          in_channels=out_channels
+          input_channels=output_channels
 

@@ -23,8 +23,16 @@ class SugarBeetDataset(Dataset):
 
     @classmethod
     def from_config(cls):
-        config = load_config('sugar_beet_dataset.yaml')
-        return SugarBeetDataset(**config)
+        training_config = load_config('training.yaml')
+        dataset_config = load_config('sugar_beet_dataset.yaml')
+
+        dataset_parameters = {**dataset_config}
+        dataset_parameters['input_height'] = training_config['input_height']
+        dataset_parameters['input_width'] = training_config['input_width']
+        dataset_parameters['target_height'] = training_config['target_height']
+        dataset_parameters['target_width'] = training_config['target_width']
+
+        return SugarBeetDataset(**dataset_parameters)
 
 
     def __init__(self,
