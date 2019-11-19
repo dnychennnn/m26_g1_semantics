@@ -13,36 +13,39 @@ import numpy as np
 import cv2
 from pathlib import Path
 
-from training.model.simple_unet import SimpleUnet
+from training.models.model import Model
 from training.dataloader import SugarBeetDataset
 from training.losses import StemClassificationLoss, StemRegressionLoss
 from training import vis
-from training import LOGS_DIR, MODELS_DIR
+from training import LOGS_DIR, MODELS_DIR, load_config
 
 
 def main():
-    learning_rate = 0.001
-    batch_size = 5
-    num_epochs = 500
+    config = load_config('training.yaml')
+
+    learning_rate = config['learning_rate']
+    batch_size = config['batch_size']
+    num_epochs = config['num_epochs']
 
     # weighting of losses
-    semantic_loss_weight = 0.3
-    stem_loss_weight = 0.7
-    stem_classification_loss_weight = 0.05
-    stem_regression_loss_weight = 0.95
+    semantic_loss_weight = config['semantic_loss_weight']
+    stem_loss_weight = config['stem_loss_weight']
+    stem_classification_loss_weight = config['stem_classification_loss_weight']
+    stem_regression_loss_weight = config['stem_regression_loss_weight']
 
     # class weights for semantic segmentation
-    weight_background = 0.05
-    weight_weed = 0.8
-    weight_sugar_beet = 0.15
+    weight_background = config['weight_background']
+    weight_weed = config['weight_weed']
+    weight_sugar_beet = config['weight_sugar_beet']
 
     # class weights for stem keypoint detection
-    weight_stem_background = 0.1
-    weight_stem = 0.9
+    weight_stem_background = config['weight_stem_background']
+    weight_stem = config['weight_stem']
 
-    size_test_set = 50
-    weights_path = None
-    # weights_path = "simple_unet.pth"
+    size_test_set = config['size_test_set']
+
+    path_to_weights_file = 'simple_unet.pth' # config['path_to_weights_file']
+    architecture_name = 'simple_unet' # config['architecture_name']
 
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -60,9 +63,7 @@ def main():
     data_loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=batch_size, shuffle=True)
     data_loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=1, shuffle=False)
 
-    model = SimpleUnet.from_config().to(device)
-    if weights_path:
-        model = load_weights(model, weights_path)
+    model = Model.by_name(architecture_name, phase='training', path_to_weights_file=path_to_weights_file, verbose=True).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -232,34 +233,6 @@ def save_plots(path, input_slice, semantic_output, stem_keypoint_output, stem_of
     cv2.imwrite(str(path_false_color), (255.0*image_false_color).astype(np.uint8))
     cv2.imwrite(str(path_semantics), (255.0*plot_semantics).astype(np.uint8))
     cv2.imwrite(str(path_stems), (255.0*plot_stems).astype(np.uint8))
-
-
-def load_weights(model, path):
-    """Load model weights from .pth file.
-
-    If path is relative, assume weights are in MODELS_DIR/path.
-
-    Note: This funcion contains parts, which were written for other student projects
-    conducted by the author.
-    """
-    path = Path(path)
-
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model.to(device)
-
-    if not path.is_absolute():
-      path = MODELS_DIR/path
-
-    print('Load weights from {}.'.format(path))
-
-    model_dict = torch.load(path, map_location=device)
-    model.load_state_dict(model_dict)
-
-    trainable_parameters = filter(lambda parameter: parameter.requires_grad, model.parameters())
-    num_trainable_parameters = sum([np.prod(parameter.size()) for parameter in trainable_parameters])
-    print('Number of trainable model parameters: {}'.format(num_trainable_parameters))
-
-    return model
 
 
 if __name__=='__main__':
