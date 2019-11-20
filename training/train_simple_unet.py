@@ -12,15 +12,15 @@ import datetime
 import numpy as np
 import cv2
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 from training.models.model import Model
 from training.dataloader import SugarBeetDataset
 from training.losses import StemClassificationLoss, StemRegressionLoss
 from training import vis
 from training import LOGS_DIR, MODELS_DIR, CUDA_DEVICE_NAME, load_config
-
-from utils import intersection_and_union, accuracy, make_classification_map, compute_mIoU_and_Acc, compute_confusion_matrix, plot_confusion_matrix
-import matplotlib.pyplot as plt
+# from training.utils import intersection_and_union, accuracy, make_classification_map, compute_mIoU_and_Acc, compute_confusion_matrix, plot_confusion_matrix
+from training.evalmetrics import compute_confusion_matrix, plot_confusion_matrix
 
 
 def main():
@@ -56,10 +56,7 @@ def main():
     dataset = SugarBeetDataset.from_config()
     # split into train and test set
     indices = torch.randperm(len(dataset)).tolist()
-    dataset_train = torch.utils.data.Subset(dataset, indices)
-
-    # use some images from the train set for testing
-    # just for testing, we will probably overfit at some stage
+    dataset_train = torch.utils.data.Subset(dataset, indices[:10]) #:-size_test_set])
     dataset_test = torch.utils.data.Subset(dataset, indices[-size_test_set:])
 
     # define training and validation data loaders
@@ -82,10 +79,9 @@ def main():
     if not log_dir.exists():
         log_dir.mkdir()
 
-
     for epoch_index in range(num_epochs):
 
-        accumulated_confusion_matrix = np.zeros((3,3))
+        accumulated_confusion_matrix_train = np.zeros((3, 3,), dtype=np.long)
 
         for batch_index, batch in enumerate(data_loader_train):
             print('Train batch {}/{} in epoch {}/{}.'.format(batch_index, len(data_loader_train), epoch_index, num_epochs))
@@ -138,87 +134,83 @@ def main():
             loss.backward()
             optimizer.step()
 
-
             # accumulate confusion matrix
-            accumulated_confusion_matrix += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
+            accumulated_confusion_matrix_train += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
 
 
-        print('Save Confusion Matrix ...')
-        # save accumulated cm
-        plot_confusion_matrix(log_dir, accumulated_confusion_matrix, classes=['background', 'weed', 'sugar beet'], normalize=True, title='train_'+str(epoch_index))
-
-        #compute IoU and Accuracy at the end of the epoch over the last batch
-        mIoU, acc = compute_mIoU_and_Acc(semantic_output_batch, semantic_target_batch, 3)
-
-        print('[Training] mIoU: {:04f}, Accuracy: {:04f}'.format(mIoU, acc))
+        # compute IoU and accuracy at the end of the epoch over the last batch
+        # mIoU, acc = compute_mIoU_and_Acc(semantic_output_batch, semantic_target_batch, 3)
+        # print('[Training] mIoU: {:04f}, Accuracy: {:04f}'.format(mIoU, acc))
 
         # end of epoch
-        print('End of epoch. Make checkpoint.')
-        cp_dir = make_checkpoint(run_name, log_dir, epoch_index, model)
-
-        # pass test set through network and save example images
-        examples_dir = cp_dir/'examples'
-        if not examples_dir.exists():
-            examples_dir.mkdir()
-
-        averaged_mIoU = 0
-        averaged_acc = 0
-
-        test_accumulated_confusion_matrix = np.zeros((3,3))
-        for batch_index, batch in enumerate(data_loader_test):
-            model.eval()
-
-            # get input an bring to device
-            input_batch, semantic_target_batch, stem_keypoint_target_batch, stem_offset_target_batch = batch
-
-            # debug overfit first image in dataset
-            # input_batch, semantic_target_batch, stem_keypoint_target_batch, stem_offset_target_batch = dataset[0]
-
-            # input_batch = input_batch[None, ...]
-            # semantic_target_batch = semantic_target_batch[None, ...]
-            # stem_keypoint_target_batch = stem_keypoint_target_batch[None, ...]
-            # stem_offset_target_batch = stem_offset_target_batch[None, ...]
-
-            input_batch = input_batch.to(device)
-            semantic_target_batch = semantic_target_batch.to(device)
-            stem_keypoint_target_batch = stem_keypoint_target_batch.to(device)
-            stem_offset_target_batch = stem_offset_target_batch.to(device)
-
-            # foward pass
-            semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = model(input_batch)
-
-            path_for_plots = examples_dir/'sample_{:02d}'.format(batch_index)
-            save_plots(path_for_plots,
-                       input_slice=input_batch[0],
-                       semantic_output=semantic_output_batch[0],
-                       stem_keypoint_output=stem_keypoint_output_batch[0],
-                       stem_offset_output=stem_offset_output_batch[0],
-                       keypoint_radius=dataset.keypoint_radius,
-                       mean_rgb=dataset.mean_rgb,
-                       std_rgb=dataset.std_rgb,
-                       mean_nir=dataset.mean_nir,
-                       std_nir=dataset.std_nir)
-
-            #compute IoU and Accuracy over every batch
-            mIoU, acc = compute_mIoU_and_Acc(semantic_output_batch, semantic_target_batch, 3)
-            averaged_mIoU += mIoU
-            averaged_acc  += acc
-            #accumulate confusion matrix
-            test_accumulated_confusion_matrix += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
-
-        plot_confusion_matrix(log_dir, test_accumulated_confusion_matrix, classes=['background', 'weed', 'sugar beet'], normalize=True, title='test_'+str(epoch_index))
-        print('[Testing] Averaged mIoU: {:04f}, Averaged Accuracy: {:04f}'.format( averaged_mIoU / size_test_set , averaged_acc / size_test_set))
+        print('End of epoch. Make checkpoint. Evaluate.')
+        make_checkpoint(run_name,
+                        log_dir,
+                        epoch_index,
+                        model,
+                        accumulated_confusion_matrix_train,
+                        dataset,
+                        data_loader_test)
 
 
-def make_checkpoint(run_name, log_dir, epoch, model):
+def make_checkpoint(run_name, log_dir, epoch, model, accumulated_confusion_matrix_train, dataset, data_loader_test):
     cp_dir = log_dir/'{}_cp_{:06d}'.format(run_name, epoch)
     if not cp_dir.exists():
         cp_dir.mkdir()
 
+    # save model weights
+    # TODO optional: only save best model to save some space
     weights_path = cp_dir/'{}_{:06d}.pth'.format(run_name, epoch)
     torch.save(model.state_dict(), str(weights_path))
 
-    return cp_dir
+    # save accumulated confusion matrix
+    print('Save confusion matrix of training.')
+    plot_confusion_matrix(log_dir, accumulated_confusion_matrix_train, class_names=['background', 'weed', 'sugar beet'], normalize=False, title='{}_{}_train'.format(run_name, epoch))
+
+    evaluate_on_checkpoint(model, dataset, data_loader_test, epoch, cp_dir)
+
+
+
+def evaluate_on_checkpoint(model, dataset, data_loader_test, epoch, cp_dir):
+    device = torch.device(CUDA_DEVICE_NAME) if torch.cuda.is_available() else torch.device('cpu')
+
+    model = model.to(device)
+    model.eval()
+
+    # folder to save some examples
+    examples_dir = cp_dir/'examples'
+    if not examples_dir.exists():
+        examples_dir.mkdir()
+
+    accumulated_confusion_matrix_test = np.zeros((3, 3), np.long)
+
+    for batch_index, batch in enumerate(data_loader_test):
+        input_batch, semantic_target_batch, stem_keypoint_target_batch, stem_offset_target_batch = batch
+
+        input_batch = input_batch.to(device)
+        semantic_target_batch = semantic_target_batch.to(device)
+        stem_keypoint_target_batch = stem_keypoint_target_batch.to(device)
+        stem_offset_target_batch = stem_offset_target_batch.to(device)
+
+        # foward pass
+        semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = model(input_batch)
+
+        path_for_plots = examples_dir/'sample_{:02d}'.format(batch_index)
+        save_plots(path_for_plots,
+                   input_slice=input_batch[0],
+                   semantic_output=semantic_output_batch[0],
+                   stem_keypoint_output=stem_keypoint_output_batch[0],
+                   stem_offset_output=stem_offset_output_batch[0],
+                   keypoint_radius=dataset.keypoint_radius,
+                   mean_rgb=dataset.mean_rgb,
+                   std_rgb=dataset.std_rgb,
+                   mean_nir=dataset.mean_nir,
+                   std_nir=dataset.std_nir)
+
+        # compute IoU and Accuracy over every batch
+        accumulated_confusion_matrix_test += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
+
+    plot_confusion_matrix(log_dir, accumulated_confusion_matrix_test, class_names=['background', 'weed', 'sugar beet'], normalize=False, title='{}_{:06d}_test'.format(run_name, epoch))
 
 
 def save_plots(path, input_slice, semantic_output, stem_keypoint_output, stem_offset_output, keypoint_radius, **normalization):
