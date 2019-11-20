@@ -15,6 +15,24 @@ Semantic segmentation and stem detection for agricultural robotics using ROS.
 
 ```
 
+### Training phase setup
+
+Set the following environment variables (e.g. by adding to your `.bashrc`):
+
+```
+export M26_G1_SEMANTICS_DATA_DIR="/path/to/training/dataset/"
+export M26_G1_SEMANTICS_LOGS_DIR="/path/to/training/logs/"
+export M26_G1_SEMANTICS_MODELS_DIR="/path/to/model/weight/files/"
+export M26_G1_SEMANTICS_CONFIGS_DIR="/path/to/config/yaml/files/"
+export M26_G1_SEMANTICS_CUDA_DEVICE_NAME="cuda" or "cuda:1" or ...
+```
+
+Add the python package to your python path:
+
+```
+export PYTHONPATH="${PYTHONPATH}:/path/to/your/clone/of/m26_g1_semantics/"
+```
+
 ### Coding style
 
 **Open for discussion!**

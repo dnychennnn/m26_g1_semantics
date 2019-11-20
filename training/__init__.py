@@ -32,6 +32,12 @@ CONFIGS_DIR = _load_dir('M26_G1_SEMANTICS_CONFIGS_DIR')
 LOGS_DIR = _load_dir('M26_G1_SEMANTICS_LOGS_DIR')
 MODELS_DIR = _load_dir('M26_G1_SEMANTICS_MODELS_DIR')
 
+try:
+    CUDA_DEVICE_NAME = os.environ['M26_G1_SEMANTICS_CUDA_DEVICE_NAME']
+except KeyError as error:
+    warnings.warn("Environment variable 'M26_G1_SEMANTICS_CUDA_DEVICE_NAME' not set. Use device name 'cuda'.")
+    CUDA_DEVICE_NAME = 'cuda'
+
 
 def load_config(path):
     """Load the configuration file (.yaml format) from the given path as a
