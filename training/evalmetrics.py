@@ -1,6 +1,8 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix
+import yaml
+from pathlib import Path
 
 from training.postprocessing import make_classification_map
 
@@ -16,25 +18,57 @@ def compute_confusion_matrix(semantic_output_batch, semantic_target_batch):
     actual_semantic_labels = actual_semantic_labels[valid_pixels]
 
     return confusion_matrix(predicted_semantic_labels.flatten(),
-                            actual_semantic_labels.flatten())
+                            actual_semantic_labels.flatten(),
+                            labels=[0, 1, 2])
 
 
-def compute_accuracy_from_confusion_matrix():
-  pass
+def compute_metrics_from_confusion_matrix(confusion_matrix):
+  """Get several class-wise metrics given a confusion matrix.
+
+  Args:
+      confusion_matrix (numpy.array): A square matrix.
+
+  Returns:
+      A python dictionary with keys 'accuracy', 'precision', 'recall', 'f1_score', 'iou'.
+  """
+  total = np.sum(confusion_matrix)
+  true_positives = np.diag(confusion_matrix)
+  false_negatives = np.sum(confusion_matrix, axis=0)-true_positives
+  false_positives = np.sum(confusion_matrix, axis=1)-true_positives
+  true_negatives = total-true_positives-false_negatives-false_positives
+
+  accuracy = (true_positives+true_negatives)/total
+  precision = true_positives/(true_positives+false_positives)
+  recall = true_positives/(true_positives+false_negatives)
+  f1_score = 2.0*precision*recall/(precision+recall)
+  iou = true_positives/(true_positives+false_negatives+false_positives)
+
+  metrics = {}
+  metrics['accuracy'] = accuracy.tolist()
+  metrics['precision'] = precision.tolist()
+  metrics['recall'] = recall.tolist()
+  metrics['f1_score'] = f1_score.tolist()
+  metrics['iou'] = iou.tolist()
+
+  return metrics
 
 
-def compute_precision_recall_from_confusion_matrix():
-  pass
+def write_metrics_to_file(path, metrics, filename, class_names=['background', 'weed', 'sugar_beet']):
+    metrics['class_names'] = class_names
 
+    metrics_dir_path = path/'metrics'
+    if not metrics_dir_path.exists():
+        metrics_dir_path.mkdir()
+    metrics_path = metrics_dir_path/filename
 
-def compute_iou_from_confusion_matrix():
-  pass
+    with metrics_path.open('w+') as yaml_file:
+        yaml.dump(metrics, yaml_file)
 
 
 def plot_confusion_matrix(path,
                           confusion_matrix,
-                          class_names,
-                          title,
+                          filename,
+                          class_names=['background', 'weed', 'sugar_beet'],
                           normalize=False,
                           color_map=plt.cm.Blues):
     """Reference: https://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html
@@ -54,7 +88,7 @@ def plot_confusion_matrix(path,
            yticks=np.arange(confusion_matrix.shape[0]),
            # ... and label them with the respective list entries
            xticklabels=class_names, yticklabels=class_names,
-           title='Confusion Matrix: '+title,
+           title='Confusion Matrix: '+Path(filename).stem,
            ylabel='True label',
            xlabel='Predicted label')
 
@@ -74,7 +108,7 @@ def plot_confusion_matrix(path,
     confusion_matrix_dir_path = path/'confusion_matrix'
     if not confusion_matrix_dir_path.exists():
         confusion_matrix_dir_path.mkdir()
-    confusion_matrix_path = confusion_matrix_dir_path/(str(title)+'.png')
+    confusion_matrix_path = confusion_matrix_dir_path/filename
 
     ax.set_ylim(len(confusion_matrix)-0.5, -0.5)
     fig.savefig(str(confusion_matrix_path), bbox_inches='tight')

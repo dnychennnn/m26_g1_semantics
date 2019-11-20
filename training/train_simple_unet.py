@@ -19,8 +19,7 @@ from training.dataloader import SugarBeetDataset
 from training.losses import StemClassificationLoss, StemRegressionLoss
 from training import vis
 from training import LOGS_DIR, MODELS_DIR, CUDA_DEVICE_NAME, load_config
-# from training.utils import intersection_and_union, accuracy, make_classification_map, compute_mIoU_and_Acc, compute_confusion_matrix, plot_confusion_matrix
-from training.evalmetrics import compute_confusion_matrix, plot_confusion_matrix
+from training.evalmetrics import compute_confusion_matrix, compute_metrics_from_confusion_matrix, plot_confusion_matrix, write_metrics_to_file
 
 
 def main():
@@ -56,7 +55,7 @@ def main():
     dataset = SugarBeetDataset.from_config()
     # split into train and test set
     indices = torch.randperm(len(dataset)).tolist()
-    dataset_train = torch.utils.data.Subset(dataset, indices[:10]) #:-size_test_set])
+    dataset_train = torch.utils.data.Subset(dataset, indices[:-size_test_set])
     dataset_test = torch.utils.data.Subset(dataset, indices[-size_test_set:])
 
     # define training and validation data loaders
@@ -125,11 +124,11 @@ def main():
             stem_loss = stem_classification_loss+stem_regression_loss
             loss = semantic_loss+stem_loss
 
-            print('  loss: {:04f}'.format(loss.item()))
-            print('  semantic_loss: {:04f}'.format(semantic_loss.item()))
-            print('  stem_loss: {:04f}'.format(stem_loss.item()))
-            print('  stem_classification_loss: {:04f}'.format(stem_classification_loss.item()))
-            print('  stem_regression_loss: {:04f}'.format(stem_regression_loss.item()))
+            print('  Loss: {:04f}'.format(loss.item()))
+            print('  Semantic loss: {:04f}'.format(semantic_loss.item()))
+            print('  Stem loss: {:04f}'.format(stem_loss.item()))
+            print('  Stem classification loss: {:04f}'.format(stem_classification_loss.item()))
+            print('  Stem regression loss: {:04f}'.format(stem_regression_loss.item()))
 
             loss.backward()
             optimizer.step()
@@ -154,24 +153,31 @@ def main():
 
 
 def make_checkpoint(run_name, log_dir, epoch, model, accumulated_confusion_matrix_train, dataset, data_loader_test):
-    cp_dir = log_dir/'{}_cp_{:06d}'.format(run_name, epoch)
+    cp_name = '{}_cp_{:06d}'.format(run_name, epoch)
+
+    cp_dir = log_dir/cp_name
     if not cp_dir.exists():
         cp_dir.mkdir()
 
     # save model weights
     # TODO optional: only save best model to save some space
-    weights_path = cp_dir/'{}_{:06d}.pth'.format(run_name, epoch)
+    weights_path = cp_dir/(cp_name+'.pth')
     torch.save(model.state_dict(), str(weights_path))
 
     # save accumulated confusion matrix
     print('Save confusion matrix of training.')
-    plot_confusion_matrix(log_dir, accumulated_confusion_matrix_train, class_names=['background', 'weed', 'sugar beet'], normalize=False, title='{}_{}_train'.format(run_name, epoch))
+    plot_confusion_matrix(cp_dir, accumulated_confusion_matrix_train, normalize=False, filename=cp_name+'_test.png')
 
-    evaluate_on_checkpoint(model, dataset, data_loader_test, epoch, cp_dir)
+    # calculate metrics on accumulated confusion matrix
+    metrics_train = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_train)
+    print('Calculate metrics of training.')
+    write_metrics_to_file(cp_dir, metrics_train, filename=cp_name+'_test.yaml')
+
+    evaluate_on_checkpoint(model, dataset, data_loader_test, epoch, cp_dir, cp_name)
 
 
 
-def evaluate_on_checkpoint(model, dataset, data_loader_test, epoch, cp_dir):
+def evaluate_on_checkpoint(model, dataset, data_loader_test, epoch, cp_dir, cp_name):
     device = torch.device(CUDA_DEVICE_NAME) if torch.cuda.is_available() else torch.device('cpu')
 
     model = model.to(device)
@@ -210,7 +216,25 @@ def evaluate_on_checkpoint(model, dataset, data_loader_test, epoch, cp_dir):
         # compute IoU and Accuracy over every batch
         accumulated_confusion_matrix_test += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
 
-    plot_confusion_matrix(log_dir, accumulated_confusion_matrix_test, class_names=['background', 'weed', 'sugar beet'], normalize=False, title='{}_{:06d}_test'.format(run_name, epoch))
+    print('Save confusion matrix of test.')
+    plot_confusion_matrix(cp_dir, accumulated_confusion_matrix_test, normalize=False, filename=cp_name+'_test.png')
+
+    # calculate metrics on accumulated confusion matrix
+    metrics_test = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_test)
+    print('Calculate metrics of test.')
+    write_metrics_to_file(cp_dir, metrics_test, filename=cp_name+'_test.yaml')
+
+    mean_accuracy = np.mean(np.asarray(metrics_test['accuracy'])[1:]) # without background
+    mean_iou = np.mean(np.asarray(metrics_test['iou'])[1:]) # without background
+
+    print('  Mean IoU (without background): {:04f}'.format(mean_iou))
+    print("  IoU 'background': {:04f}".format(metrics_test['iou'][0]))
+    print("  IoU 'weed': {:04f}".format(metrics_test['iou'][1]))
+    print("  IoU 'sugar beet': {:04f}".format(metrics_test['iou'][2]))
+    print('  Mean accuracy (without background): {:04f}'.format(mean_accuracy))
+    print("  Accuracy 'background': {:04f}".format(metrics_test['accuracy'][0]))
+    print("  Accuracy 'weed': {:04f}".format(metrics_test['accuracy'][1]))
+    print("  Accuracy 'sugar beet': {:04f}".format(metrics_test['accuracy'][2]))
 
 
 def save_plots(path, input_slice, semantic_output, stem_keypoint_output, stem_offset_output, keypoint_radius, **normalization):
