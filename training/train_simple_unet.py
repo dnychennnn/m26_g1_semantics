@@ -17,7 +17,7 @@ from training.models.model import Model
 from training.dataloader import SugarBeetDataset
 from training.losses import StemClassificationLoss, StemRegressionLoss
 from training import vis
-from training import LOGS_DIR, MODELS_DIR, load_config
+from training import LOGS_DIR, MODELS_DIR, CUDA_DEVICE_NAME, load_config
 
 from utils import intersection_and_union, accuracy, make_classification_map, compute_mIoU_and_Acc, compute_confusion_matrix, plot_confusion_matrix
 import matplotlib.pyplot as plt
@@ -51,7 +51,7 @@ def main():
     path_to_weights_file = 'simple_unet.pth' # config['path_to_weights_file']
     architecture_name = 'simple_unet' # config['architecture_name']
 
-    device = torch.device('cuda:1') if torch.cuda.is_available() else torch.device('cpu')
+    device = torch.device(CUDA_DEVICE_NAME) if torch.cuda.is_available() else torch.device('cpu')
 
     dataset = SugarBeetDataset.from_config()
     # split into train and test set
@@ -128,7 +128,7 @@ def main():
 
             stem_loss = stem_classification_loss+stem_regression_loss
             loss = semantic_loss+stem_loss
-            
+
             print('  loss: {:04f}'.format(loss.item()))
             print('  semantic_loss: {:04f}'.format(semantic_loss.item()))
             print('  stem_loss: {:04f}'.format(stem_loss.item()))
@@ -146,8 +146,8 @@ def main():
         print('Save Confusion Matrix ...')
         # save accumulated cm
         plot_confusion_matrix(log_dir, accumulated_confusion_matrix, classes=['background', 'weed', 'sugar beet'], normalize=True, title='train_'+str(epoch_index))
-        
-	    #compute IoU and Accuracy at the end of the epoch over the last batch
+
+        #compute IoU and Accuracy at the end of the epoch over the last batch
         mIoU, acc = compute_mIoU_and_Acc(semantic_output_batch, semantic_target_batch, 3)
 
         print('[Training] mIoU: {:04f}, Accuracy: {:04f}'.format(mIoU, acc))
@@ -186,7 +186,7 @@ def main():
 
             # foward pass
             semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = model(input_batch)
-            
+
             path_for_plots = examples_dir/'sample_{:02d}'.format(batch_index)
             save_plots(path_for_plots,
                        input_slice=input_batch[0],
@@ -205,7 +205,7 @@ def main():
             averaged_acc  += acc
             #accumulate confusion matrix
             test_accumulated_confusion_matrix += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
-        
+
         plot_confusion_matrix(log_dir, test_accumulated_confusion_matrix, classes=['background', 'weed', 'sugar beet'], normalize=True, title='test_'+str(epoch_index))
         print('[Testing] Averaged mIoU: {:04f}, Averaged Accuracy: {:04f}'.format( averaged_mIoU / size_test_set , averaged_acc / size_test_set))
 

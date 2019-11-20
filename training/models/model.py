@@ -17,7 +17,7 @@ from pathlib import Path
 
 from training.models.FCN import FCN
 from training.models.simple_unet import SimpleUnet
-from training import MODELS_DIR
+from training import MODELS_DIR, CUDA_DEVICE_NAME
 
 class Model:
 
@@ -68,7 +68,7 @@ class Model:
         if verbose:
             print('Load weights from {}.'.format(path_to_weights_file))
 
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        device = torch.device(CUDA_DEVICE_NAME if torch.cuda.is_available() else 'cpu')
         model.to(device)
 
         model_dict = torch.load(path_to_weights_file, map_location=device)
