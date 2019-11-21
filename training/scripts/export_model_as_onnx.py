@@ -49,7 +49,6 @@ def export_model_as_onnx(architecture_name, path_to_weights_file, path_to_output
                       training=False,
                       input_names=['input'],
                       output_names=['semantic_output', 'stem_keypoint_output', 'stem_offset_output'],
-                      dynamic_axes={},
                       verbose=False)
 
 
