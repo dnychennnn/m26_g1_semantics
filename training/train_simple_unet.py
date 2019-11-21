@@ -12,12 +12,14 @@ import datetime
 import numpy as np
 import cv2
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 from training.models.model import Model
 from training.dataloader import SugarBeetDataset
 from training.losses import StemClassificationLoss, StemRegressionLoss
 from training import vis
-from training import LOGS_DIR, MODELS_DIR, load_config
+from training import LOGS_DIR, MODELS_DIR, CUDA_DEVICE_NAME, load_config
+from training.evalmetrics import compute_confusion_matrix, compute_metrics_from_confusion_matrix, plot_confusion_matrix, write_metrics_to_file
 
 
 def main():
@@ -38,6 +40,7 @@ def main():
     weight_weed = config['weight_weed']
     weight_sugar_beet = config['weight_sugar_beet']
 
+
     # class weights for stem keypoint detection
     weight_stem_background = config['weight_stem_background']
     weight_stem = config['weight_stem']
@@ -47,16 +50,12 @@ def main():
     path_to_weights_file = 'simple_unet.pth' # config['path_to_weights_file']
     architecture_name = 'simple_unet' # config['architecture_name']
 
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    device = torch.device(CUDA_DEVICE_NAME) if torch.cuda.is_available() else torch.device('cpu')
 
     dataset = SugarBeetDataset.from_config()
-
     # split into train and test set
     indices = torch.randperm(len(dataset)).tolist()
-    dataset_train = torch.utils.data.Subset(dataset, indices)
-
-    # use some images from the train set for testing
-    # just for testing, we will probably overfit at some stage
+    dataset_train = torch.utils.data.Subset(dataset, indices[:-size_test_set])
     dataset_test = torch.utils.data.Subset(dataset, indices[-size_test_set:])
 
     # define training and validation data loaders
@@ -80,6 +79,9 @@ def main():
         log_dir.mkdir()
 
     for epoch_index in range(num_epochs):
+
+        accumulated_confusion_matrix_train = np.zeros((3, 3,), dtype=np.long)
+
         for batch_index, batch in enumerate(data_loader_train):
             print('Train batch {}/{} in epoch {}/{}.'.format(batch_index, len(data_loader_train), epoch_index, num_epochs))
 
@@ -122,68 +124,117 @@ def main():
             stem_loss = stem_classification_loss+stem_regression_loss
             loss = semantic_loss+stem_loss
 
-            print('  loss: {:04f}'.format(loss.item()))
-            print('  semantic_loss: {:04f}'.format(semantic_loss.item()))
-            print('  stem_loss: {:04f}'.format(stem_loss.item()))
-            print('  stem_classification_loss: {:04f}'.format(stem_classification_loss.item()))
-            print('  stem_regression_loss: {:04f}'.format(stem_regression_loss.item()))
+            print('  Loss: {:04f}'.format(loss.item()))
+            print('  Semantic loss: {:04f}'.format(semantic_loss.item()))
+            print('  Stem loss: {:04f}'.format(stem_loss.item()))
+            print('  Stem classification loss: {:04f}'.format(stem_classification_loss.item()))
+            print('  Stem regression loss: {:04f}'.format(stem_regression_loss.item()))
 
             loss.backward()
             optimizer.step()
 
+            # accumulate confusion matrix
+            accumulated_confusion_matrix_train += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
+
+
+        # compute IoU and accuracy at the end of the epoch over the last batch
+        # mIoU, acc = compute_mIoU_and_Acc(semantic_output_batch, semantic_target_batch, 3)
+        # print('[Training] mIoU: {:04f}, Accuracy: {:04f}'.format(mIoU, acc))
+
         # end of epoch
-        print('End of epoch. Make checkpoint.')
-        cp_dir = make_checkpoint(run_name, log_dir, epoch_index, model)
-
-        # pass test set through network and save example images
-        examples_dir = cp_dir/'examples'
-        if not examples_dir.exists():
-            examples_dir.mkdir()
-
-        for batch_index, batch in enumerate(data_loader_test):
-            model.eval()
-
-            # get input an bring to device
-            input_batch, semantic_target_batch, stem_keypoint_target_batch, stem_offset_target_batch = batch
-
-            # debug overfit first image in dataset
-            # input_batch, semantic_target_batch, stem_keypoint_target_batch, stem_offset_target_batch = dataset[0]
-
-            # input_batch = input_batch[None, ...]
-            # semantic_target_batch = semantic_target_batch[None, ...]
-            # stem_keypoint_target_batch = stem_keypoint_target_batch[None, ...]
-            # stem_offset_target_batch = stem_offset_target_batch[None, ...]
-
-            input_batch = input_batch.to(device)
-            semantic_target_batch = semantic_target_batch.to(device)
-            stem_keypoint_target_batch = stem_keypoint_target_batch.to(device)
-            stem_offset_target_batch = stem_offset_target_batch.to(device)
-
-            # foward pass
-            semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = model(input_batch)
-
-            path_for_plots = examples_dir/'sample_{:02d}'.format(batch_index)
-            save_plots(path_for_plots,
-                       input_slice=input_batch[0],
-                       semantic_output=semantic_output_batch[0],
-                       stem_keypoint_output=stem_keypoint_output_batch[0],
-                       stem_offset_output=stem_offset_output_batch[0],
-                       keypoint_radius=dataset.keypoint_radius,
-                       mean_rgb=dataset.mean_rgb,
-                       std_rgb=dataset.std_rgb,
-                       mean_nir=dataset.mean_nir,
-                       std_nir=dataset.std_nir)
+        print('End of epoch. Make checkpoint. Evaluate.')
+        make_checkpoint(run_name,
+                        log_dir,
+                        epoch_index,
+                        model,
+                        accumulated_confusion_matrix_train,
+                        dataset,
+                        data_loader_test)
 
 
-def make_checkpoint(run_name, log_dir, epoch, model):
-    cp_dir = log_dir/'{}_cp_{:06d}'.format(run_name, epoch)
+def make_checkpoint(run_name, log_dir, epoch, model, accumulated_confusion_matrix_train, dataset, data_loader_test):
+    cp_name = '{}_cp_{:06d}'.format(run_name, epoch)
+
+    cp_dir = log_dir/cp_name
     if not cp_dir.exists():
         cp_dir.mkdir()
 
-    weights_path = cp_dir/'{}_{:06d}.pth'.format(run_name, epoch)
+    # save model weights
+    # TODO optional: only save best model to save some space
+    weights_path = cp_dir/(cp_name+'.pth')
     torch.save(model.state_dict(), str(weights_path))
 
-    return cp_dir
+    # save accumulated confusion matrix
+    print('Save confusion matrix of training.')
+    plot_confusion_matrix(cp_dir, accumulated_confusion_matrix_train, normalize=False, filename=cp_name+'_test.png')
+
+    # calculate metrics on accumulated confusion matrix
+    metrics_train = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_train)
+    print('Calculate metrics of training.')
+    write_metrics_to_file(cp_dir, metrics_train, filename=cp_name+'_test.yaml')
+
+    evaluate_on_checkpoint(model, dataset, data_loader_test, epoch, cp_dir, cp_name)
+
+
+
+def evaluate_on_checkpoint(model, dataset, data_loader_test, epoch, cp_dir, cp_name):
+    device = torch.device(CUDA_DEVICE_NAME) if torch.cuda.is_available() else torch.device('cpu')
+
+    model = model.to(device)
+    model.eval()
+
+    # folder to save some examples
+    examples_dir = cp_dir/'examples'
+    if not examples_dir.exists():
+        examples_dir.mkdir()
+
+    accumulated_confusion_matrix_test = np.zeros((3, 3), np.long)
+
+    for batch_index, batch in enumerate(data_loader_test):
+        input_batch, semantic_target_batch, stem_keypoint_target_batch, stem_offset_target_batch = batch
+
+        input_batch = input_batch.to(device)
+        semantic_target_batch = semantic_target_batch.to(device)
+        stem_keypoint_target_batch = stem_keypoint_target_batch.to(device)
+        stem_offset_target_batch = stem_offset_target_batch.to(device)
+
+        # foward pass
+        semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = model(input_batch)
+
+        path_for_plots = examples_dir/'sample_{:02d}'.format(batch_index)
+        save_plots(path_for_plots,
+                   input_slice=input_batch[0],
+                   semantic_output=semantic_output_batch[0],
+                   stem_keypoint_output=stem_keypoint_output_batch[0],
+                   stem_offset_output=stem_offset_output_batch[0],
+                   keypoint_radius=dataset.keypoint_radius,
+                   mean_rgb=dataset.mean_rgb,
+                   std_rgb=dataset.std_rgb,
+                   mean_nir=dataset.mean_nir,
+                   std_nir=dataset.std_nir)
+
+        # compute IoU and Accuracy over every batch
+        accumulated_confusion_matrix_test += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
+
+    print('Save confusion matrix of test.')
+    plot_confusion_matrix(cp_dir, accumulated_confusion_matrix_test, normalize=False, filename=cp_name+'_test.png')
+
+    # calculate metrics on accumulated confusion matrix
+    metrics_test = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_test)
+    print('Calculate metrics of test.')
+    write_metrics_to_file(cp_dir, metrics_test, filename=cp_name+'_test.yaml')
+
+    mean_accuracy = np.mean(np.asarray(metrics_test['accuracy'])[1:]) # without background
+    mean_iou = np.mean(np.asarray(metrics_test['iou'])[1:]) # without background
+
+    print('  Mean IoU (without background): {:04f}'.format(mean_iou))
+    print("  IoU 'background': {:04f}".format(metrics_test['iou'][0]))
+    print("  IoU 'weed': {:04f}".format(metrics_test['iou'][1]))
+    print("  IoU 'sugar beet': {:04f}".format(metrics_test['iou'][2]))
+    print('  Mean accuracy (without background): {:04f}'.format(mean_accuracy))
+    print("  Accuracy 'background': {:04f}".format(metrics_test['accuracy'][0]))
+    print("  Accuracy 'weed': {:04f}".format(metrics_test['accuracy'][1]))
+    print("  Accuracy 'sugar beet': {:04f}".format(metrics_test['accuracy'][2]))
 
 
 def save_plots(path, input_slice, semantic_output, stem_keypoint_output, stem_offset_output, keypoint_radius, **normalization):

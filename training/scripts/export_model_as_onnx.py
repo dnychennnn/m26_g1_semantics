@@ -7,14 +7,14 @@ from pathlib import Path
 import torch
 
 from training.models.model import Model
-from training import MODELS_DIR, load_config
+from training import MODELS_DIR, CUDA_DEVICE_NAME, load_config
 
 
 @click.command()
 @click.argument('architecture_name', type=str, default='simple_unet')
 @click.argument('path_to_weights_file', type=click.Path(dir_okay=False, file_okay=True), default='simple_unet.pth')
 @click.option('-o', '--path-to-output-file', type=click.Path(dir_okay=False, file_okay=True), default=None)
-@click.option('-d', '--device', type=str, default='cuda')
+@click.option('-d', '--device', type=str, default=CUDA_DEVICE_NAME)
 def export_model_as_onnx(architecture_name, path_to_weights_file, path_to_output_file, device):
     try:
         model = Model.by_name(architecture_name, phase='deployment', path_to_weights_file=path_to_weights_file, verbose=True)
