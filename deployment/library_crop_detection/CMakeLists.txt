@@ -5,6 +5,10 @@ project(library_crop_detection)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Try to build with TensorRT
+set(TENSORRT_ENABLED TRUE)
+message(STATUS "Enable build with TensorRT: ${TENSORRT_ENABLED}")
+
 # Build type is debug by default
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Debug)
@@ -14,6 +18,7 @@ endif()
 # Use DEBUG_MODE preprocessor flag
 if(${CMAKE_BUILD_TYPE} MATCHES Debug)
   add_definitions(-DDEBUG_MODE)
+  message(STATUS "Build with debug option.")
 endif()
 
 # Warning and optimaization
@@ -56,48 +61,73 @@ endif(Boost_FOUND)
   #message(STATUS "Threads not found.")
 #endif(Threads_FOUND)
 
-# Find CUDA
-find_package(CUDA)
-if(CUDA_FOUND)
-  message(STATUS "Found CUDA version: ${CUDA_VERSION}")
-else()
-  message(FATAL_ERROR "CUDA not found.")
-endif(CUDA_FOUND)
-
 # Find TensorRT
-find_path(NVINFER_INCLUDE_DIRS NvInfer.h
-          HINT $ENV{NVINFER_INCLUDE_DIRS})
-if(NVINFER_INCLUDE_DIRS)
-  message(STATUS "Found NVINFER_INCLUDE_DIRS: ${NVINFER_INCLUDE_DIRS}")
-else()
-  message(FATAL_ERROR "NVINFER_INCLUDE_DIRS not found.")
-endif(NVINFER_INCLUDE_DIRS)
+if(TENSORRT_ENABLED)
+  # Find CUDA
+  find_package(CUDA)
+  if(CUDA_FOUND)
+    message(STATUS "Found CUDA version: ${CUDA_VERSION}")
+  else()
+    message(WARNING "CUDA not found.")
+  endif(CUDA_FOUND)
 
-find_library(NVINFER_LIBRARY libnvinfer.so
-             HINT $ENV{NVINFER_LIBRARY_PATH})
+  find_path(NVINFER_INCLUDE_DIRS NvInfer.h
+            HINT $ENV{NVINFER_INCLUDE_DIRS})
+  if(NVINFER_INCLUDE_DIRS)
+    message(STATUS "Found NVINFER_INCLUDE_DIRS: ${NVINFER_INCLUDE_DIRS}")
+  else()
+    message(WARNING "NVINFER_INCLUDE_DIRS not found.")
+  endif(NVINFER_INCLUDE_DIRS)
 
-if(NVINFER_LIBRARY)
-  message(STATUS "Found NVINFER_LIBRARY: ${NVINFER_LIBRARY}")
-else()
-  message(FATAL_ERROR "NVINFER_LIBRARY not found.")
-endif(NVINFER_LIBRARY)
+  find_library(NVINFER_LIBRARY libnvinfer.so
+               HINT $ENV{NVINFER_LIBRARY_PATH})
 
-# Find TensorRT onnx parser
-find_path(NVONNXPARSER_INCLUDE_DIRS NvOnnxParser.h
-          HINT $ENV{NVONNXPARSER_INCLUDE_DIRS})
-if(NVONNXPARSER_INCLUDE_DIRS)
-  message(STATUS "Found NVONNXPARSER_INCLUDE_DIRS: ${NVINFER_INCLUDE_DIRS}")
-else()
-  message(FATAL_ERROR "NVONNXPARSER_INCLUDE_DIRS not found.")
-endif(NVONNXPARSER_INCLUDE_DIRS)
+  if(NVINFER_LIBRARY)
+    message(STATUS "Found NVINFER_LIBRARY: ${NVINFER_LIBRARY}")
+  else()
+    message(WARNING "NVINFER_LIBRARY not found.")
+  endif(NVINFER_LIBRARY)
 
-find_library(NVONNXPARSER_LIBRARY nvonnxparser.so
-             HINT $ENV{NVONNXPARSER_LIBRARY_PATH})
-if(NVONNXPARSER_LIBRARY)
-  message(STATUS "Found NVONNXPARSER_LIBRARY: ${NVONNXPARSER_LIBRARY}")
+  # Find TensorRT onnx parser
+  find_path(NVONNXPARSER_INCLUDE_DIRS NvOnnxParser.h
+            HINT $ENV{NVONNXPARSER_INCLUDE_DIRS})
+  if(NVONNXPARSER_INCLUDE_DIRS)
+    message(STATUS "Found NVONNXPARSER_INCLUDE_DIRS: ${NVINFER_INCLUDE_DIRS}")
+  else()
+    message(WARNING "NVONNXPARSER_INCLUDE_DIRS not found.")
+  endif(NVONNXPARSER_INCLUDE_DIRS)
+
+  find_library(NVONNXPARSER_LIBRARY libnvonnxparser.so
+               HINT $ENV{NVONNXPARSER_LIBRARY_PATH})
+  if(NVONNXPARSER_LIBRARY)
+    message(STATUS "Found NVONNXPARSER_LIBRARY: ${NVONNXPARSER_LIBRARY}")
+  else()
+    message(WARNING "NVONNXPARSER_LIBRARY not found.")
+  endif(NVONNXPARSER_LIBRARY)
+endif(TENSORRT_ENABLED)
+
+if(TENSORRT_ENABLED AND CUDA_FOUND AND NVINFER_INCLUDE_DIRS AND NVINFER_LIBRARY)
+  set(TENSORRT_AVAILABLE TRUE)
+endif()
+
+if(TENSORRT_AVAILABLE AND NVONNXPARSER_INCLUDE_DIRS AND NVONNXPARSER_LIBRARY)
+  set(TENSORRT_ONNX_PARSER_AVAILABLE TRUE)
+endif()
+
+# Set preprocessor flag to selectively build with TensorRT
+if(TENSORRT_AVAILABLE)
+  message(STATUS "Build with TensorRT.")
+  add_definitions(-DTENSORRT_AVAILABLE)
 else()
-  message(FATAL_ERROR "NVONNXPARSER_LIBRARY not found.")
-endif(NVONNXPARSER_LIBRARY)
+  message(STATUS "Build without TensorRT.")
+endif(TENSORRT_AVAILABLE)
+
+if(TENSORRT_ONNX_PARSER_AVAILABLE)
+  message(STATUS "Build with TensorRT ONNX Parser.")
+  add_definitions(-DTENSORRT_ONNX_PARSER_AVAILABLE)
+else()
+  message(STATUS "Build without TensorRT ONNX Parser.")
+endif(TENSORRT_ONNX_PARSER_AVAILABLE)
 
 # Include
 include_directories(
@@ -108,8 +138,15 @@ include_directories(
   ${Boost_INCLUDE_DIRS}
   ${CUDA_INCLUDE_DIRS}
   ${NVINFER_INCLUDE_DIRS}
-  ${NVONNXPARSER_INCLUDE_DIRS}
 )
+
+if(TENSORRT_AVAILABLE)
+  include_directories(${NVINFER_INCLUDE_DIRS})
+endif(TENSORRT_AVAILABLE)
+
+if(TENSORRT_ONNX_PARSER_AVAILABLE)
+  include_directories(${NVONNXPARSER_INCLUDE_DIRS})
+endif(TENSORRT_ONNX_PARSER_AVAILABLE)
 
 # Build library
 add_subdirectory("src")
