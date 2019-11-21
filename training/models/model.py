@@ -47,6 +47,11 @@ class Model:
             num_trainable_parameters = sum([np.prod(parameter.size()) for parameter in trainable_parameters])
             print('Number of trainable model parameters: {}'.format(num_trainable_parameters))
 
+        if phase=='training':
+          model = model.train()
+        elif phase=='deployment':
+          model = model.eval()
+
         return model
 
 
