@@ -45,6 +45,19 @@ We currently work with CUDA 10.1 and TensorRT 6.0.1.5.
 Our CMake files use hints set by environment variables to locate TensorRT related files.
 If it is necessary to set these variables will propapby depend on the way TensorRT is installed on your system.
 
+It is possible to build the code without having TensorRT installed. To explicitly build without TensorRT,
+change the following line in the `CMakeLists.txt`:
+
+```
+set(TENSORRT_ENABLED TRUE)
+```
+
+To:
+
+```
+set(TENSORRT_ENABLED FALSE)
+```
+
 ```
 export NVINFER_INCLUDE_DIRS="/path/to/TensorRT/include/"
 export NVINFER_LIBRARY_PATH="/path/to/TensorRT/lib/"
