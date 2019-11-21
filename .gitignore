@@ -7,3 +7,4 @@ pretrain_try.py
 **/__pycache__/**/*
 **/build/*
 **/bin/*
+**/lib/*
