@@ -11,8 +11,8 @@ from training import MODELS_DIR, CUDA_DEVICE_NAME, load_config
 
 
 @click.command()
-@click.argument('architecture_name', type=str)
-@click.argument('path_to_weights_file', type=click.Path(dir_okay=False, file_okay=True))
+@click.argument('architecture_name', type=str, default='simple_unet')
+@click.argument('path_to_weights_file', type=click.Path(dir_okay=False, file_okay=True), default='simple_unet.pth')
 @click.option('-o', '--path-to-output-file', type=click.Path(dir_okay=False, file_okay=True), default=None)
 @click.option('-d', '--device', type=str, default=CUDA_DEVICE_NAME)
 def export_model_as_onnx(architecture_name, path_to_weights_file, path_to_output_file, device):
@@ -40,7 +40,16 @@ def export_model_as_onnx(architecture_name, path_to_weights_file, path_to_output
 
     model = model.to(device)
     dummy_input = torch.randn(batch_size, input_channels, input_height, input_width, device=device)
-    torch.onnx.export(model, dummy_input, str(path_to_output_file), verbose=True)
+    model(dummy_input)
+
+    torch.onnx.export(model=model,
+                      args=dummy_input,
+                      f=str(path_to_output_file),
+                      export_params=True,
+                      training=False,
+                      input_names=['input'],
+                      output_names=['semantic_output', 'stem_keypoint_output', 'stem_offset_output'],
+                      verbose=False)
 
 
 if __name__=='__main__':

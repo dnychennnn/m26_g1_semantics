@@ -1,10 +1,12 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>tensorrt_test</name>
+  <name>ros_crop_detection</name>
   <version>0.1.0</version>
-  <description>Test ROS with tensorrt</description>
+  <description>Crop detection inside ROS.</description>
+  <maintainer email="s6ynchenk@uni-bonn.de">Yun-Yu Chen</maintainer>
   <maintainer email="s7jaquak@uni-bonn.de">Jan Quakernack</maintainer>
   <license>TODO</license>
+  <author email="s6ynchenk@uni-bonn.de">Yun-Yu Chen</author>
   <author email="s7jaquak@uni-bonn.de">Jan Quakernack</author>
 
   <depend>roscpp</depend>

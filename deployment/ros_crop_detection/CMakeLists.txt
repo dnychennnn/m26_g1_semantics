@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(tensorrt_test)
+project(ros_crop_detection)
 
 ## Use CPP 17
 set(CMAKE_CXX_STANDARD 17)
@@ -109,6 +109,7 @@ endif(Boost_FOUND)
 ## LIBRARIES: libraries you create in this project that dependent projects also need
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
+
 catkin_package(
   INCLUDE_DIRS
     include
@@ -142,7 +143,7 @@ include_directories(
 
 ## Declare cpp executables
 add_executable(tester_node
-  src/tester_node.cpp
+  src/crop_detection_node.cpp
 )
 
 ## Specify libraries to link executable targets against

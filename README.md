@@ -33,6 +33,39 @@ Add the python package to your python path:
 export PYTHONPATH="${PYTHONPATH}:/path/to/your/clone/of/m26_g1_semantics/"
 ```
 
+### Deployment phase setup
+
+#### TensorRT
+
+We currently work with CUDA 10.1 and TensorRT 6.0.1.5.
+
+[TensorRT with installation instructions](https://github.com/NVIDIA/TensorRT)
+[TensorRT backend for ONNX](https://github.com/onnx/onnx-tensorrt)
+
+Our CMake files use hints set by environment variables to locate TensorRT related files.
+If it is necessary to set these variables will propapby depend on the way TensorRT is installed on your system.
+
+It is possible to build the code without having TensorRT installed. To explicitly build without TensorRT,
+change the following line in the `CMakeLists.txt`:
+
+```
+set(TENSORRT_ENABLED TRUE)
+```
+
+To:
+
+```
+set(TENSORRT_ENABLED FALSE)
+```
+
+```
+export NVINFER_INCLUDE_DIRS="/path/to/TensorRT/include/"
+export NVINFER_LIBRARY_PATH="/path/to/TensorRT/lib/"
+
+export NVONNXPARSER_INCLUDE_DIRS="/path/to/TensorRT/parsers/onnx/"
+export NVONNXPARSER_LIBRARY_PATH="/path/to/TensorRT/build/out/"
+```
+
 ### Coding style
 
 **Open for discussion!**

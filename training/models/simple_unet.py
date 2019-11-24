@@ -30,6 +30,7 @@ class SimpleUnet(nn.Module):
         model_parameters['input_channels'] = config['input_channels']
         model_parameters['input_height'] = config['input_height']
         model_parameters['input_width'] = config['input_width']
+        model_parameters['phase'] = phase
 
         return SimpleUnet(**model_parameters)
 
@@ -44,8 +45,15 @@ class SimpleUnet(nn.Module):
                  num_conv_encoder,
                  num_conv_semantic_decoder,
                  num_conv_stem_decoder,
-                 dropout_rate):
+                 dropout_rate,
+                 phase):
         super().__init__()
+
+        self.phase = phase
+
+        if (self.phase=='deployment'):
+          print('No dropout as we are in deployment phase.')
+          dropout_rate=None
 
         # make encoder
         self.encoder = Encoder(input_channels=input_channels,
@@ -100,6 +108,7 @@ class SimpleUnet(nn.Module):
                                              activation=None,
                                              dropout_rate=None)
 
+
         self.final_conv_stem_keypoint = ConvBlock(input_channels=num_filters_stem_decoder[-1],
                                                   output_channels=1, # one output: stem confidence
                                                   kernel_size=1,
@@ -114,6 +123,17 @@ class SimpleUnet(nn.Module):
                                                 activation=None,
                                                 dropout_rate=None)
 
+        if self.phase=='deployment':
+          print('Apply final activations as we are in deployment phase.')
+
+          # apply softmax to logits of semantic output
+          self.softmax_semantic = nn.Softmax(dim=1)
+
+          # apply sigmoid to logits of stem keypoint output
+          self.sigmoid_stem_keypoint = nn.Sigmoid()
+
+
+
     def forward(self, x):
         x, skips = self.encoder(x)
 
@@ -124,6 +144,10 @@ class SimpleUnet(nn.Module):
         semantic_output = self.final_conv_semantic(semantic_output)
         # print('semantic_output', semantic_output.shape)
 
+        if self.phase=='deployment':
+          # apply softmax to logits of semantic output
+          semantic_output = self.softmax_semantic(semantic_output)
+
         stem_output = self.stem_decoder(x, skips)
         # print('stem_output', stem_output.shape)
 
@@ -131,6 +155,10 @@ class SimpleUnet(nn.Module):
         # print('stem_keypoint_output', stem_keypoint_output.shape)
         stem_keypoint_output = self.final_conv_stem_keypoint(stem_keypoint_output)
         # print('stem_keypoint_output', stem_keypoint_output.shape)
+
+        if self.phase=='deployment':
+          # apply sigmoid to logits of stem keypoint output
+          stem_keypoint_output = self.sigmoid_stem_keypoint(stem_keypoint_output)
 
         stem_offset_output = self.final_sequence_stem_offset(stem_output)
         # print('stem_offset_output', stem_offset_output.shape)
