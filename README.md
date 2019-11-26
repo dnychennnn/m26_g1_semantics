@@ -39,11 +39,19 @@ export PYTHONPATH="${PYTHONPATH}:/path/to/your/clone/of/m26_g1_semantics/"
 
 We currently work with CUDA 10.1 and TensorRT 6.0.1.5.
 
-[TensorRT with installation instructions](https://github.com/NVIDIA/TensorRT)
-[TensorRT backend for ONNX](https://github.com/onnx/onnx-tensorrt)
+* [TensorRT with installation instructions](https://github.com/NVIDIA/TensorRT)
+* [TensorRT backend for ONNX](https://github.com/onnx/onnx-tensorrt)
 
 Our CMake files use hints set by environment variables to locate TensorRT related files.
 If it is necessary to set these variables will propapby depend on the way TensorRT is installed on your system.
+
+```
+export NVINFER_INCLUDE_DIRS="/path/to/TensorRT/include/"
+export NVINFER_LIBRARY_PATH="/path/to/TensorRT/lib/"
+
+export NVONNXPARSER_INCLUDE_DIRS="/path/to/TensorRT/parsers/onnx/"
+export NVONNXPARSER_LIBRARY_PATH="/path/to/TensorRT/build/out/"
+```
 
 It is possible to build the code without having TensorRT installed. To explicitly build without TensorRT,
 change the following line in the `CMakeLists.txt`:
@@ -56,14 +64,6 @@ To:
 
 ```
 set(TENSORRT_ENABLED FALSE)
-```
-
-```
-export NVINFER_INCLUDE_DIRS="/path/to/TensorRT/include/"
-export NVINFER_LIBRARY_PATH="/path/to/TensorRT/lib/"
-
-export NVONNXPARSER_INCLUDE_DIRS="/path/to/TensorRT/parsers/onnx/"
-export NVONNXPARSER_LIBRARY_PATH="/path/to/TensorRT/build/out/"
 ```
 
 ### Coding style
