@@ -161,7 +161,9 @@ NetworkInference TensorrtNetwork::Infer(const cv::Mat& kImage) const {
   std::vector<cv::Mat> semantic_class_confidences;
   cv::split(semantic_output, semantic_class_confidences);
 
-  cv::imshow("sugar beet confidence", semantic_class_confidences[0]);
+  cv::imshow("background confidence", semantic_class_confidences[0]);
+  cv::imshow("weed confidence", semantic_class_confidences[1]);
+  cv::imshow("sugar beet confidence", semantic_class_confidences[2]);
   cv::waitKey(0);
 
   return NetworkInference();

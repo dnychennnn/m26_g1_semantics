@@ -30,6 +30,8 @@ public:
   /*!
    * Perfoms plant detection on the given image.
    *
+   * TODO Flag for minimal inference (only provide class labels+stem positions, no heatmaps, no other intermediate outputs).
+   *
    * @param kImage The four channel input image as a cv::Mat. Data type is expected to be CV_8U.
    *   Images smaller or larger than the network input size will be scaled to match the desired input site.
    * @return An instance of NetworkInference, which allows to access the different outcomes.

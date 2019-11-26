@@ -9,6 +9,6 @@ if(TENSORRT_ONNX_PARSER_AVAILABLE)
   target_link_libraries(crop_detection ${NVONNXPARSER_LIBRARY})
 endif(TENSORRT_ONNX_PARSER_AVAILABLE)
 
-add_executable(test_network test_network.cpp)
-target_link_libraries(test_network crop_detection)
+add_executable(network_demo network_demo.cpp)
+target_link_libraries(network_demo crop_detection)
 
