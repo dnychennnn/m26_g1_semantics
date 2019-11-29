@@ -22,7 +22,7 @@ def compute_confusion_matrix(semantic_output_batch, semantic_target_batch):
                             labels=[0, 1, 2])
 
 
-def compute_metrics_from_confusion_matrix(confusion_matrix):
+def compute_metrics_from_confusion_matrix(confusion_matrix, eps=1e-6):
   """Get several class-wise metrics given a confusion matrix.
 
   Args:
@@ -37,11 +37,11 @@ def compute_metrics_from_confusion_matrix(confusion_matrix):
   false_positives = np.sum(confusion_matrix, axis=1)-true_positives
   true_negatives = total-true_positives-false_negatives-false_positives
 
-  accuracy = (true_positives+true_negatives)/total
-  precision = true_positives/(true_positives+false_positives)
-  recall = true_positives/(true_positives+false_negatives)
-  f1_score = 2.0*precision*recall/(precision+recall)
-  iou = true_positives/(true_positives+false_negatives+false_positives)
+  accuracy = (true_positives+true_negatives)/(total+eps)
+  precision = true_positives/(true_positives+false_positives+eps)
+  recall = true_positives/(true_positives+false_negatives+eps)
+  f1_score = 2.0*precision*recall/(precision+recall+eps)
+  iou = true_positives/(true_positives+false_negatives+false_positives+eps)
 
   metrics = {}
   metrics['accuracy'] = accuracy.tolist()
@@ -70,11 +70,12 @@ def plot_confusion_matrix(path,
                           filename,
                           class_names=['background', 'weed', 'sugar_beet'],
                           normalize=False,
-                          color_map=plt.cm.Blues):
+                          color_map=plt.cm.Blues,
+                          eps=1e-6):
     """Reference: https://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html
     """
 
-    accuracy = np.trace(confusion_matrix)/np.sum(confusion_matrix).astype('float')
+    accuracy = np.trace(confusion_matrix)/(np.sum(confusion_matrix).astype('float')+eps)
     misclass = 1-accuracy
 
     if normalize:
