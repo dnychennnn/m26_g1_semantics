@@ -83,6 +83,8 @@ def main():
         accumulated_confusion_matrix_train = np.zeros((3, 3,), dtype=np.long)
 
         for batch_index, batch in enumerate(data_loader_train):
+            # skip trainin
+            break
             print('Train batch {}/{} in epoch {}/{}.'.format(batch_index, len(data_loader_train), epoch_index, num_epochs))
 
             model.train()
@@ -199,7 +201,7 @@ def evaluate_on_checkpoint(model, dataset, data_loader_test, epoch, cp_dir, cp_n
         stem_offset_target_batch = stem_offset_target_batch.to(device)
 
         # foward pass
-        semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = model(input_batch)
+        semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch, stem_voting_output_batch = model(input_batch)
 
         path_for_plots = examples_dir/'sample_{:02d}'.format(batch_index)
         save_plots(path_for_plots,
