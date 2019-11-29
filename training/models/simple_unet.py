@@ -12,6 +12,7 @@ import numpy as np
 
 from training import CONFIGS_DIR, load_config
 from training.models.layers import ConvBlock, ConvSequence
+from training.models.postprocessing_modules import StemVoting
 
 
 class SimpleUnet(nn.Module):
@@ -30,7 +31,7 @@ class SimpleUnet(nn.Module):
         model_parameters['input_channels'] = config['input_channels']
         model_parameters['input_height'] = config['input_height']
         model_parameters['input_width'] = config['input_width']
-        model_parameters['phase'] = phase
+        model_parameters['keypoint_radius'] = config['keypoint_radius']
 
         return SimpleUnet(**model_parameters)
 
@@ -39,21 +40,15 @@ class SimpleUnet(nn.Module):
                  input_channels,
                  input_height,
                  input_width,
+                 keypoint_radius,
                  num_filters_encoder,
                  num_filters_semantic_decoder,
                  num_filters_stem_decoder,
                  num_conv_encoder,
                  num_conv_semantic_decoder,
                  num_conv_stem_decoder,
-                 dropout_rate,
-                 phase):
+                 dropout_rate):
         super().__init__()
-
-        self.phase = phase
-
-        if (self.phase=='deployment'):
-          print('No dropout as we are in deployment phase.')
-          dropout_rate=None
 
         # make encoder
         self.encoder = Encoder(input_channels=input_channels,
@@ -123,15 +118,14 @@ class SimpleUnet(nn.Module):
                                                 activation=None,
                                                 dropout_rate=None)
 
-        if self.phase=='deployment':
-          print('Apply final activations as we are in deployment phase.')
+        # softmax of logits of semantic output, applied in evel mode only
+        self.softmax_semantic = nn.Softmax(dim=1)
 
-          # apply softmax to logits of semantic output
-          self.softmax_semantic = nn.Softmax(dim=1)
+        # sigmoid of logits of stem keypoint output, apllied in eval mode only
+        self.sigmoid_stem_keypoint = nn.Sigmoid()
 
-          # apply sigmoid to logits of stem keypoint output
-          self.sigmoid_stem_keypoint = nn.Sigmoid()
-
+        # inference module to get the stem position from keypoint confindences and offsets
+        self.stem_voting_module = StemVoting(input_width, input_height, keypoint_radius)
 
 
     def forward(self, x):
@@ -144,7 +138,8 @@ class SimpleUnet(nn.Module):
         semantic_output = self.final_conv_semantic(semantic_output)
         # print('semantic_output', semantic_output.shape)
 
-        if self.phase=='deployment':
+        if not self.training:
+          # we are in evaluation mode
           # apply softmax to logits of semantic output
           semantic_output = self.softmax_semantic(semantic_output)
 
@@ -156,7 +151,8 @@ class SimpleUnet(nn.Module):
         stem_keypoint_output = self.final_conv_stem_keypoint(stem_keypoint_output)
         # print('stem_keypoint_output', stem_keypoint_output.shape)
 
-        if self.phase=='deployment':
+        if not self.training:
+          # we are in evaluation mode
           # apply sigmoid to logits of stem keypoint output
           stem_keypoint_output = self.sigmoid_stem_keypoint(stem_keypoint_output)
 
@@ -165,8 +161,11 @@ class SimpleUnet(nn.Module):
         stem_offset_output = self.final_conv_stem_offset(stem_offset_output)
         # print('stem_offset_output', stem_offset_output.shape)
 
-        # stem_keypoint_output = stem_output[:, 0, ...]
-        # stem_offset_output = stem_output[:, 1:, ...]
+        if not self.training:
+          # we are in evaluation mode
+          stem_voting_output = self.stem_voting_module(stem_keypoint_output, stem_offset_output)
+
+          return semantic_output, stem_keypoint_output, stem_offset_output, stem_voting_output
 
         return semantic_output, stem_keypoint_output, stem_offset_output
 

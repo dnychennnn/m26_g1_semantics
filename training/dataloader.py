@@ -31,6 +31,7 @@ class SugarBeetDataset(Dataset):
         dataset_parameters['input_width'] = training_config['input_width']
         dataset_parameters['target_height'] = training_config['target_height']
         dataset_parameters['target_width'] = training_config['target_width']
+        dataset_parameters['keypoint_radius'] = training_config['keypoint_radius']
 
         return SugarBeetDataset(**dataset_parameters)
 
