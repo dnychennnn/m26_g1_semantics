@@ -110,10 +110,9 @@ def make_plot_from_semantic_output(input_rgb, input_nir, semantic_output, apply_
     return plot
 
 
-def make_plot_from_stem_output(input_rgb, input_nir, stem_keypoint_output, stem_offset_output, keypoint_radius, apply_sigmoid, apply_tanh, **normalization):
+def make_plot_from_stem_keypoint_offset_output(input_rgb, input_nir, stem_keypoint_output, stem_offset_output, keypoint_radius, apply_sigmoid, apply_tanh, **normalization):
     """
-    Note: This function contains parts, which were written for other student projects
-    conducted by the author.
+    Note: Parts adapted from code originally written for MGE-MSR-P-S.
     """
     image = tensor_to_false_color(input_rgb, input_nir, **normalization)
 
@@ -156,6 +155,37 @@ def make_plot_from_stem_output(input_rgb, input_nir, stem_keypoint_output, stem_
                 cv2.arrowedLine(arrows, (x, y), (x+offset_x, y+offset_y), (1.0, 1.0, 1.0), thickness=1, tipLength=0.2)
 
     plot = plot+0.5*arrows
+    plot = np.clip(plot, 0.0, 1.0)
+
+    return plot
+
+
+def make_plot_from_stem_output(input_rgb, input_nir, stem_output, keypoint_radius, **normalization):
+    """
+    Note: This function contains parts, which were written for other student projects
+    conducted by the author.
+    """
+    image = tensor_to_false_color(input_rgb, input_nir, **normalization)
+
+    height, width = image.shape[:2]
+
+    while len(stem_output.shape)>2:
+        stem_output = stem_output[0]
+
+    plot = image
+
+    markers = np.zeros((height, width, 3,), dtype=np.float)
+
+    # draw a marker at each stem positions
+    for position in stem_output:
+        x, y = position[1], position[0]
+        cv2.circle(markers, (x, y), keypoint_radius, (1.0, 1.0, 1.0), 1)
+        cv2.line(markers, (x, y+keypoint_radius), (x, y+keypoint_radius-10), (1.0, 1.0, 1.0), 1)
+        cv2.line(markers, (x, y-keypoint_radius), (x, y-keypoint_radius+10), (1.0, 1.0, 1.0), 1)
+        cv2.line(markers, (x+keypoint_radius, y), (x+keypoint_radius-10, y), (1.0, 1.0, 1.0), 1)
+        cv2.line(markers, (x-keypoint_radius, y), (x-keypoint_radius+10, y), (1.0, 1.0, 1.0), 1)
+
+    plot = plot+0.5*markers
     plot = np.clip(plot, 0.0, 1.0)
 
     return plot

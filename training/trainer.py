@@ -61,8 +61,11 @@ class Trainer:
                  weight_stem_background,
                  weight_stem,
                  keypoint_radius,
-                 stem_inference_threshold,
-                 stem_inference_device_option):
+                 stem_inference_device_option,
+                 stem_inference_kernel_size_votes,
+                 stem_inference_kernel_size_peaks,
+                 stem_inference_threshold_votes,
+                 stem_inference_threshold_peaks):
 
         self.learning_rate = learning_rate
         self.batch_size = batch_size
@@ -83,8 +86,6 @@ class Trainer:
         self.weight_stem_background = weight_stem_background
         self.weight_stem = weight_stem
         self.keypoint_radius = keypoint_radius
-        self.stem_inference_threshold = stem_inference_threshold
-        self.stem_inference_device_option = stem_inference_device_option
 
         self.device = torch.device(CUDA_DEVICE_NAME) if torch.cuda.is_available() else torch.device('cpu')
 
@@ -113,7 +114,12 @@ class Trainer:
 
         # init postprocessing
         self.stem_inference_module = StemInference(self.target_width, self.target_height,
-                self.keypoint_radius, threshold=self.stem_inference_threshold, device_option=self.stem_inference_device_option)
+                keypoint_radius=self.keypoint_radius,
+                threshold_votes=stem_inference_threshold_votes,
+                threshold_peaks=stem_inference_threshold_peaks,
+                kernel_size_votes=stem_inference_kernel_size_votes,
+                kernel_size_peaks=stem_inference_kernel_size_peaks,
+                device_option=stem_inference_device_option).to(self.device)
 
         # init logs directory
         now = datetime.datetime.now()
@@ -256,10 +262,13 @@ class Trainer:
                 image_false_color = vis.tensor_to_false_color(input_batch[0, :3], input_batch[0, 3],
                         **self.dataset.normalization_rgb_dict, **self.dataset.normalization_nir_dict)
                 cv2.imshow('input', image_false_color)
-                cv2.waitKey()
+                # cv2.waitKey()
 
             # foward pass
             semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = self.model(input_batch)
+
+            # postprocessing
+            stem_output = self.stem_inference_module(stem_keypoint_output_batch, stem_offset_output_batch)
 
             path_for_plots = examples_dir/'sample_{:02d}'.format(batch_index)
             self.make_plots(path_for_plots,
@@ -267,13 +276,14 @@ class Trainer:
                             semantic_output=semantic_output_batch[0],
                             stem_keypoint_output=stem_keypoint_output_batch[0],
                             stem_offset_output=stem_offset_output_batch[0],
+                            stem_output=stem_output[0],
                             test_run=test_run)
 
             # compute IoU and Accuracy over every batch
             accumulated_confusion_matrix_test += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
 
             # debug
-            if test_run and batch_index==5:
+            if test_run and batch_index==2:
                 break
 
         print('Save confusion matrix of test.')
@@ -297,7 +307,7 @@ class Trainer:
         print("  Accuracy 'sugar beet': {:04f}".format(metrics_test['accuracy'][2]))
 
 
-    def make_plots(self, path, input_slice, semantic_output, stem_keypoint_output, stem_offset_output, test_run):
+    def make_plots(self, path, input_slice, semantic_output, stem_keypoint_output, stem_offset_output, stem_output, test_run):
         """Make plots and write images.
         """
         image_bgr = vis.tensor_to_bgr(input_slice[:3], **self.dataset.normalization_rgb_dict)
@@ -311,13 +321,20 @@ class Trainer:
                                                             **self.dataset.normalization_rgb_dict,
                                                             **self.dataset.normalization_nir_dict)
 
+        plot_stems_keypoint_offset = vis.make_plot_from_stem_keypoint_offset_output(input_rgb=input_slice[:3],
+                                                                                    input_nir=input_slice[3],
+                                                                                    stem_keypoint_output=stem_keypoint_output,
+                                                                                    stem_offset_output=stem_offset_output,
+                                                                                    keypoint_radius=self.keypoint_radius,
+                                                                                    apply_sigmoid=False,
+                                                                                    apply_tanh=False,
+                                                                                    **self.dataset.normalization_rgb_dict,
+                                                                                    **self.dataset.normalization_nir_dict)
+
         plot_stems = vis.make_plot_from_stem_output(input_rgb=input_slice[:3],
                                                     input_nir=input_slice[3],
-                                                    stem_keypoint_output=stem_keypoint_output,
-                                                    stem_offset_output=stem_offset_output,
+                                                    stem_output=stem_output,
                                                     keypoint_radius=self.keypoint_radius,
-                                                    apply_sigmoid=False,
-                                                    apply_tanh=False,
                                                     **self.dataset.normalization_rgb_dict,
                                                     **self.dataset.normalization_nir_dict)
 
@@ -325,11 +342,13 @@ class Trainer:
         path_nir = path.parent/(path.name+'_nir.jpg')
         path_false_color = path.parent/(path.name+'_false_color.jpg')
         path_semantics = path.parent/(path.name+'_semantics.jpg')
+        path_stems_keypoint_offset = path.parent/(path.name+'_stems_keypoint_offset.jpg')
         path_stems = path.parent/(path.name+'_stems.jpg')
 
         if test_run:
-            cv2.imshow('plot_semantics', plot_semantics)
-            cv2.imshow('plot_stems', plot_stems)
+            cv2.imshow('semantics', plot_semantics)
+            cv2.imshow('stems_keypoint_offset', plot_stems_keypoint_offset)
+            cv2.imshow('stems', plot_stems)
             # cv2.imshow('image_bgr', image_bgr)
             # cv2.imshow('image_nir', image_nir)
             # cv2.imshow('image_false_color', image_false_color)
@@ -339,5 +358,6 @@ class Trainer:
         cv2.imwrite(str(path_nir), (255.0*image_nir).astype(np.uint8))
         cv2.imwrite(str(path_false_color), (255.0*image_false_color).astype(np.uint8))
         cv2.imwrite(str(path_semantics), (255.0*plot_semantics).astype(np.uint8))
+        cv2.imwrite(str(path_stems_keypoint_offset), (255.0*plot_stems_keypoint_offset).astype(np.uint8))
         cv2.imwrite(str(path_stems), (255.0*plot_stems).astype(np.uint8))
 
