@@ -40,7 +40,7 @@ def tensor_to_bgr(tensor, mean_rgb=None, std_rgb=None):
     return tensor
 
 
-def tensor_to_single_channel(tensor, mean=None, std=None):
+def tensor_to_single_channel(tensor, mean_nir=None, std_nir=None):
     """Convert single channel tensor to numpy.array.
 
     Optionally undo normalization with the provided parameters.
@@ -62,9 +62,9 @@ def tensor_to_single_channel(tensor, mean=None, std=None):
 
     tensor = tensor.cpu().detach().numpy()
 
-    if mean is not None and std is not None:
-        tensor *= std
-        tensor += mean
+    if mean_nir is not None and std_nir is not None:
+        tensor *= std_nir
+        tensor += mean_nir
 
     return tensor
 
@@ -73,7 +73,7 @@ def tensor_to_false_color(tensor_rgb, tensor_nir, mean_rgb, std_rgb, mean_nir, s
     """False color image by replacing green channel with NIR.
     """
     image_bgr = tensor_to_bgr(tensor_rgb, mean_rgb=mean_rgb, std_rgb=std_rgb)
-    image_nir = tensor_to_single_channel(tensor_nir, mean=mean_nir, std=std_nir)
+    image_nir = tensor_to_single_channel(tensor_nir, mean_nir=mean_nir, std_nir=std_nir)
 
     # replace green channel with NIR
     image_bgr[..., 1] = image_nir

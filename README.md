@@ -15,7 +15,9 @@ Semantic segmentation and stem detection for agricultural robotics using ROS.
 
 ```
 
-### Training phase setup
+### Training phase
+
+#### Setup
 
 Set the following environment variables (e.g. by adding to your `.bashrc`):
 
@@ -42,9 +44,25 @@ python setup.py install
 
 The code should run without this step completed, but you will get a warning.
 
-### Deployment phase setup
+#### Run
 
-#### TensorRT
+Training parameters are defined in `training/configs/training.yaml`. To train with these parameters, use:
+
+```
+python training/script/train.py
+```
+
+Or if you just want to do a quick check:
+
+```
+python training/script/train.py --test-run
+```
+
+### Deployment phase
+
+#### Setup
+
+##### TensorRT
 
 We currently work with CUDA 10.1 and TensorRT 6.0.1.5.
 

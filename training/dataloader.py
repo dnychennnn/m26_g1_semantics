@@ -88,6 +88,12 @@ class SugarBeetDataset(Dataset):
         self.mean_nir = mean_nir
         self.std_nir = std_nir
 
+        # to provide this for other components
+        self.normalization_rgb_dict = {'mean_rgb': self.mean_rgb,
+                                       'std_rgb': self.std_rgb}
+        self.normalization_nir_dict = {'mean_nir': self.mean_nir,
+                                       'std_nir': self.std_nir}
+
         self.rgb_normalization = transforms.Normalize(mean=mean_rgb, std=std_rgb, inplace=True)
         self.nir_normalization = transforms.Normalize(mean=(mean_nir,), std=(std_nir,), inplace=True)
 

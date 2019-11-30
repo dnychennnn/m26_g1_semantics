@@ -4,7 +4,7 @@ from sklearn.metrics import confusion_matrix
 import yaml
 from pathlib import Path
 
-from training.postprocessing import make_classification_map
+from training.postprocessing.semantic_inference import make_classification_map
 
 
 def compute_confusion_matrix(semantic_output_batch, semantic_target_batch):

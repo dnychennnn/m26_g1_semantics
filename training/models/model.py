@@ -1,14 +1,12 @@
 """Common way to get one of our models.
 
-Note: This module contains parts, which were written for other student projects
-conducted by the author.
-
 Usage:
     fcn_model = Model.by_name('fcn', phase='training')
     simple_unet_model = Model.by_name('simple_unet', phase='deployment', path_to_weights_file='simple_unet.pth')
 
-Author:
-    Jan Quakernack
+Author: Jan Quakernack
+
+Note: Parts adapted from code originally written for MGE-MSR-P-S.
 """
 
 import torch

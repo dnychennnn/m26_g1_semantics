@@ -2,8 +2,7 @@
 
 Author: Jan Quakernack
 
-Note: This module contains parts, which were written for other student projects
-conducted by the author.
+Note: Parts adapted from code originally written for MGE-MSR-P-S.
 """
 
 import torch
@@ -12,7 +11,6 @@ import numpy as np
 
 from training import CONFIGS_DIR, load_config
 from training.models.layers import ConvBlock, ConvSequence
-from training.models.stem_inference import StemInference
 
 
 class SimpleUnet(nn.Module):
@@ -32,9 +30,6 @@ class SimpleUnet(nn.Module):
         model_parameters['input_channels'] = config['input_channels']
         model_parameters['input_height'] = config['input_height']
         model_parameters['input_width'] = config['input_width']
-        model_parameters['keypoint_radius'] = config['keypoint_radius']
-        model_parameters['stem_inference_threshold'] = config['stem_inference_threshold']
-        model_parameters['stem_inference_device_option'] = config['stem_inference_device_option']
 
         return SimpleUnet(**model_parameters)
 
@@ -44,16 +39,13 @@ class SimpleUnet(nn.Module):
                  input_channels,
                  input_height,
                  input_width,
-                 keypoint_radius,
                  num_filters_encoder,
                  num_filters_semantic_decoder,
                  num_filters_stem_decoder,
                  num_conv_encoder,
                  num_conv_semantic_decoder,
                  num_conv_stem_decoder,
-                 dropout_rate,
-                 stem_inference_threshold,
-                 stem_inference_device_option):
+                 dropout_rate):
         super().__init__()
 
         self.phase = phase
@@ -132,11 +124,6 @@ class SimpleUnet(nn.Module):
         # sigmoid of logits of stem keypoint output, apllied in eval mode only
         self.sigmoid_stem_keypoint = nn.Sigmoid()
 
-        # inference module to get the stem position from keypoint confindences and offsets
-        # not used in deployment phase, because we cannot get this into onnx
-        self.stem_inference_module = StemInference(input_width, input_height,
-                keypoint_radius, threshold=stem_inference_threshold, device_option=stem_inference_device_option)
-
 
     def forward(self, x):
         x, skips = self.encoder(x)
@@ -170,12 +157,6 @@ class SimpleUnet(nn.Module):
         # print('stem_offset_output', stem_offset_output.shape)
         stem_offset_output = self.final_conv_stem_offset(stem_offset_output)
         # print('stem_offset_output', stem_offset_output.shape)
-
-        if not self.training and not self.phase=='deployment':
-          # we are in evaluation mode
-          stem_output = self.stem_inference_module(stem_keypoint_output, stem_offset_output)
-
-          return semantic_output, stem_keypoint_output, stem_offset_output, stem_output
 
         return semantic_output, stem_keypoint_output, stem_offset_output
 
