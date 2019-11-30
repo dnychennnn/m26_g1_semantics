@@ -38,7 +38,7 @@ export PYTHONPATH="${PYTHONPATH}:/path/to/your/clone/of/m26_g1_semantics/"
 We use our own small C++/CUDA Pytorch extension for inference of the stem positions. Build it with:
 
 ```
-cd training/models/stem_inference_cpp/
+cd training/postprocessing/stem_inference_cpp/
 python setup.py install
 ```
 
