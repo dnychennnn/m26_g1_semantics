@@ -16,12 +16,16 @@
 namespace igg {
 
 struct NetworkInference {
-  cv::Mat image, semantic_class_labels, semantic_class_confidence, stem_keypoint_confidence, stem_offset;
+  std::unique_ptr<cv::Mat> input_image = nullptr;
+  std::unique_ptr<cv::Mat> semantic_class_labels = nullptr;
+  std::unique_ptr<cv::Mat> semantic_class_confidence = nullptr;
+  std::unique_ptr<cv::Mat> stem_keypoint_confidence = nullptr;
 
-  /*!
-   * Relative to image scaled to network input dimensions.
-   */
-  std::vector<cv::Vec2f> stem_positions;
+  //! Relative to the image scaled to network output.
+  std::unique_ptr<cv::Mat> stem_offset = nullptr;
+
+  //! Relative to the image scaled to network output.
+  std::unique_ptr<std::vector<cv::Vec2f>> stem_positions = nullptr;
 };
 
 
@@ -30,13 +34,13 @@ public:
   /*!
    * Perfoms plant detection on the given image.
    *
-   * TODO Flag for minimal inference (only provide class labels+stem positions, no heatmaps, no other intermediate outputs).
-   *
+   * @param result Pointer to an instance of NetworkInference, where the output should be placed.
    * @param kImage The four channel input image as a cv::Mat. Data type is expected to be CV_8U.
    *   Images smaller or larger than the network input size will be scaled to match the desired input site.
-   * @return An instance of NetworkInference, which allows to access the different outcomes.
+   * @param kMinimalInference If true, only return semantic class labels and stem positions
+   *   an no other intermediate results (some attributes of NetworkInference will be set to nullptr).
    */
-  virtual NetworkInference Infer(const cv::Mat& kImage) const = 0;
+  virtual void Infer(NetworkInference* result, const cv::Mat& kImage, const bool kMinimalInference) = 0;
 
   /*!
    * @return True if the network is loaded and ready for inference, false otherwise.
@@ -49,12 +53,16 @@ public:
    * @param kFilepath Path to file that defines the network.
    * @param kForceRebuild Make the network to parse the file again,
    *   even if an already build engine with a matching name is found.
+   *   If passing this flag has an effect will depend on the type of network instantiated.
    */
-  virtual bool Load(const std::string kFilepath, const bool kForceRebuild) = 0;
+  virtual void Load(const std::string& kFilepath, const bool kForceRebuild) = 0;
 
-  int InputWidth() const {return this->input_width_;}
-  int InputHeight() const {return this->input_height_;}
-  int InputChannels() const {return this->input_channels_;}
+  /*!
+   * The input dimensions may be only valid if IsReadyToInfer() and change on a call of Load().
+   */
+  virtual int InputWidth() const = 0;
+  virtual int InputHeight() const = 0;
+  virtual int InputChannels() const = 0;
 
   /*!
    * Get the default directory for model files set via an environment variable.
@@ -66,12 +74,6 @@ public:
     }
     return boost::filesystem::path(kCstrModelsDir);
   }
-
-
-private:
-  int input_width_ = 0;
-  int input_height_ = 0;
-  int input_channels_ = 0;
 
 };
 

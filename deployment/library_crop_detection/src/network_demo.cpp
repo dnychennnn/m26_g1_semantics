@@ -22,8 +22,11 @@ int main() {
   cv::Mat input;
   cv::merge(channels, input);
 
+  std::vector<float> mean {0.3855186419211486, 0.22667925089614235, 0.053568861512275835, 0.22021524472007756};
+  std::vector<float> std {0.12405956089564812, 0.07152223154313433, 0.010760791977355064, 0.06568905699414836};
+
   // create out network instance
-  igg::TensorrtNetwork network;
+  igg::TensorrtNetwork network(mean, std);
 
   // load onnx file or use serialized engine if available
   const auto model_path = igg::Network::ModelsDir()/"simple_unet.onnx";
@@ -34,5 +37,6 @@ int main() {
   std::cout << "Network ready to infer: " << network.IsReadyToInfer() << "\n";
 
   // pass image
-  network.Infer(input);
+  igg::NetworkInference result;
+  network.Infer(&result, input, false);
 }
