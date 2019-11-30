@@ -1,14 +1,12 @@
 """Common way to get one of our models.
 
-Note: This module contains parts, which were written for other student projects
-conducted by the author.
-
 Usage:
     fcn_model = Model.by_name('fcn', phase='training')
     simple_unet_model = Model.by_name('simple_unet', phase='deployment', path_to_weights_file='simple_unet.pth')
 
-Author:
-    Jan Quakernack
+Author: Jan Quakernack
+
+Note: Parts adapted from code originally written for MGE-MSR-P-S.
 """
 
 import torch
@@ -33,9 +31,9 @@ class Model:
             verbose (bool): Print some information.
         """
         if architecture_name=='fcn':
-            model = FCN.from_config(phase=phase)
+            model = FCN.from_config(phase)
         elif architecture_name=='simple_unet':
-            model = SimpleUnet.from_config(phase=phase)
+            model = SimpleUnet.from_config(phase)
         else:
             raise ValueError("Architechture '{}' is not supported.".format(architecture_name))
 
@@ -56,7 +54,7 @@ class Model:
 
 
     @classmethod
-    def load_weights(cls, model, path_to_weights_file, verbose=False):
+    def load_weights(cls, model, path_to_weights_file, load_parts=True, verbose=False):
         """Load model weights from .pth file.
 
         If path_to_weights_file is relative, assume weights are in MODELS_DIR/path_to_weights_file.
@@ -68,7 +66,7 @@ class Model:
         path_to_weights_file = Path(path_to_weights_file)
 
         if not path_to_weights_file.is_absolute():
-          path_to_weights_file = MODELS_DIR/path_to_weights_file
+            path_to_weights_file = MODELS_DIR/path_to_weights_file
 
         if verbose:
             print('Load weights from {}.'.format(path_to_weights_file))
@@ -76,8 +74,28 @@ class Model:
         device = torch.device(CUDA_DEVICE_NAME if torch.cuda.is_available() else 'cpu')
         model.to(device)
 
-        model_dict = torch.load(path_to_weights_file, map_location=device)
-        model.load_state_dict(model_dict)
+        if load_parts:
+            model_dict = model.state_dict()
+
+            # try to load those part of an existing model that match the architecture
+            # Reference: https://discuss.pytorch.org/t/how-to-load-part-of-pre-trained-model/1113/2
+            pretrained_dict = torch.load(path_to_weights_file, map_location=device)
+
+            no_correspondence = [key for key, value in pretrained_dict.items()
+                                 if key not in model_dict or model_dict[key].shape!=value.shape]
+
+            if len(no_correspondence)>0:
+                print('Cannot load layers:')
+                for key in no_correspondence:
+                    print(' * '+key)
+
+            pretrained_dict = {key: value for key, value in pretrained_dict.items()
+                               if key in model_dict and model_dict[key].shape==value.shape}
+            model_dict.update(pretrained_dict)
+            model.load_state_dict(model_dict)
+        else:
+            model_dict = torch.load(path_to_weights_file, map_location=device)
+            model.load_state_dict(model_dict)
 
         return model
 

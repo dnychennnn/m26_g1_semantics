@@ -31,6 +31,7 @@ class SugarBeetDataset(Dataset):
         dataset_parameters['input_width'] = training_config['input_width']
         dataset_parameters['target_height'] = training_config['target_height']
         dataset_parameters['target_width'] = training_config['target_width']
+        dataset_parameters['keypoint_radius'] = training_config['keypoint_radius']
 
         return SugarBeetDataset(**dataset_parameters)
 
@@ -86,6 +87,12 @@ class SugarBeetDataset(Dataset):
         self.std_rgb = std_rgb
         self.mean_nir = mean_nir
         self.std_nir = std_nir
+
+        # to provide this for other components
+        self.normalization_rgb_dict = {'mean_rgb': self.mean_rgb,
+                                       'std_rgb': self.std_rgb}
+        self.normalization_nir_dict = {'mean_nir': self.mean_nir,
+                                       'std_nir': self.std_nir}
 
         self.rgb_normalization = transforms.Normalize(mean=mean_rgb, std=std_rgb, inplace=True)
         self.nir_normalization = transforms.Normalize(mean=(mean_nir,), std=(std_nir,), inplace=True)

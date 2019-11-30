@@ -15,7 +15,9 @@ Semantic segmentation and stem detection for agricultural robotics using ROS.
 
 ```
 
-### Training phase setup
+### Training phase
+
+#### Setup
 
 Set the following environment variables (e.g. by adding to your `.bashrc`):
 
@@ -33,9 +35,34 @@ Add the python package to your python path:
 export PYTHONPATH="${PYTHONPATH}:/path/to/your/clone/of/m26_g1_semantics/"
 ```
 
-### Deployment phase setup
+We use our own small C++/CUDA Pytorch extension for inference of the stem positions. Build it with:
 
-#### TensorRT
+```
+cd training/postprocessing/stem_inference_cpp/
+python setup.py install
+```
+
+The code should run without this step completed, but you will get a warning.
+
+#### Run
+
+Training parameters are defined in `training/configs/training.yaml`. To train with these parameters, use:
+
+```
+python training/script/train.py
+```
+
+Or if you just want to do a quick check:
+
+```
+python training/script/train.py --test-run
+```
+
+### Deployment phase
+
+#### Setup
+
+##### TensorRT
 
 We currently work with CUDA 10.1 and TensorRT 6.0.1.5.
 

@@ -1,0 +1,3 @@
+build/
+dist/
+stem_inference_cpp.egg-info/

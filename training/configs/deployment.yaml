@@ -7,3 +7,5 @@ input_width: 432
 
 target_height: 322
 target_width: 432
+
+keypoint_radius: 15 # in target pixels
