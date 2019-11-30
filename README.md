@@ -33,6 +33,15 @@ Add the python package to your python path:
 export PYTHONPATH="${PYTHONPATH}:/path/to/your/clone/of/m26_g1_semantics/"
 ```
 
+We use our own small C++/CUDA Pytorch extension for inference of the stem positions. Build it with:
+
+```
+cd training/models/stem_inference_cpp/
+python setup.py install
+```
+
+The code should run without this step completed, but you will get a warning.
+
 ### Deployment phase setup
 
 #### TensorRT

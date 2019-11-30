@@ -1,5 +1,5 @@
-#ifndef M26_G1_SEMANTICS_TRAINING_MODELS_POSTPROCESSING_MODULES_COMMON_HPP_
-#define M26_G1_SEMANTICS_TRAINING_MODELS_POSTPROCESSING_MODULES_COMMON_HPP_
+#ifndef M26_G1_SEMANTICS_TRAINING_MODELS_STEM_INFERENCE_COMMON_HPP_
+#define M26_G1_SEMANTICS_TRAINING_MODELS_STEM_INFERENCE_COMMON_HPP_
 /*!
  * @file common.hpp
  *
@@ -11,6 +11,7 @@
 
 #include <torch/extension.h>
 
+
 # define CHECK_DIM(tensor, dim) igg::CheckDim(tensor, dim, #tensor);
 # define CHECK_SIZE(tensor, dim, size) igg::CheckSize(tensor, dim, size, #tensor);
 # define CHECK_SIZE_MATCH(tensor1, tensor2, dim) igg::CheckSizeMatch(tensor1, tensor2, dim, #tensor1, #tensor2);
@@ -18,6 +19,7 @@
 # define CHECK_DTYPE(tensor, dtype) igg::CheckDtype(tensor, dtype, #tensor);
 # define CHECK_DEVICE_MATCH(tensor1, tensor2) igg::CheckDeviceMatch(tensor1, tensor2, #tensor1, #tensor2);
 # define CHECK_IS_CPU(tensor) igg::CheckIsCpu(tensor, #tensor);
+# define CHECK_IS_CUDA(tensor) igg::CheckIsCuda(tensor, #tensor);
 
 namespace igg {
 
@@ -38,4 +40,4 @@ void CheckIsCuda(const at::Tensor& kTensor, const std::string kVariableName);
 
 } // namespace igg
 
-#endif // M26_G1_SEMANTICS_TRAINING_MODELS_POSTPROCESSING_MODULES_COMMON_HPP_
+#endif // M26_G1_SEMANTICS_TRAINING_MODELS_STEM_INFERENCE_COMMON_HPP_

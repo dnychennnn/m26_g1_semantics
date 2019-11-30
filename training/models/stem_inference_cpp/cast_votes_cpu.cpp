@@ -1,10 +1,15 @@
-#include "cast_votes.hpp"
+/*!
+ * @file cast_votes.cpp
+ *
+ * @author Jan Quakernack
+ * @version 0.1
+ */
 
-#include <iostream>
+#include "common.hpp"
 
 namespace igg {
 
-at::Tensor CastVotes(const torch::Tensor& kVotesXs,
+at::Tensor CastVotesCpu(const torch::Tensor& kVotesXs,
                      torch::Tensor kVotesYs,
                      torch::Tensor kVotesWeights,
                      const float kThreshold) {
@@ -23,20 +28,6 @@ at::Tensor CastVotes(const torch::Tensor& kVotesXs,
   CHECK_DEVICE_MATCH(kVotesXs, kVotesYs);
   CHECK_SIZE_MATCH(kVotesXs, kVotesWeights, 1);
   CHECK_SIZE_MATCH(kVotesXs, kVotesWeights, 2);
-  CHECK_DEVICE_MATCH(kVotesXs, kVotesWeights);
-
-  if (kVotesXs.device().is_cpu()) {
-    return CastVotesCpu(kVotesXs, kVotesYs, kVotesWeights, kThreshold);
-  }
-
-  return CastVotesCuda(kVotesXs, kVotesYs, kVotesWeights, kThreshold);
-}
-
-
-at::Tensor CastVotesCpu(torch::Tensor kVotesXs,
-                        torch::Tensor kVotesYs,
-                        torch::Tensor kVotesWeights,
-                        const float kThreshold) {
   CHECK_IS_CPU(kVotesXs)
   CHECK_IS_CPU(kVotesYs)
   CHECK_IS_CPU(kVotesWeights)
@@ -52,6 +43,8 @@ at::Tensor CastVotesCpu(torch::Tensor kVotesXs,
   const auto kVotesWeightsAccesssor = kVotesWeights.accessor<float, 3>();
   auto votes_accessor = votes.accessor<float, 3>();
 
+  // in principle batches could be processed in parallel also on a cpu,
+  // but in evaluation as well as deployment we usually use a batch size of one
   for(int batch_index=0; batch_index<kBatchSize; batch_index++){
     for(int y=0; y<kHeight; y++){
       for(int x=0; x<kWidth; x++){
@@ -68,14 +61,8 @@ at::Tensor CastVotesCpu(torch::Tensor kVotesXs,
   return votes;
 }
 
-
-at::Tensor CastVotesCuda(torch::Tensor kVotesXs,
-                         torch::Tensor kVotesYs,
-                         torch::Tensor kVotesWeights,
-                         const float kThreshold) {
-
-}
-
-
 } // namespace igg
 
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, module) {
+  module.def("cast_votes_cpu", &igg::CastVotesCpu, "Cast votes (CPU)");
+}

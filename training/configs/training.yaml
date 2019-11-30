@@ -32,3 +32,6 @@ size_test_set: 50
 
 architecture_name: None # 'fcn', 'simple_unet'
 path_to_weights_file: None # 'simple_unet.pth'
+
+stem_inference_device_option: 'cuda' # 'cuda' (= CUDA), 'cpu' (= Pytorch C++ API), 'naive' (= numpy)
+stem_inference_threshold: 0.01 # pixel with a keypoint confidence below this value do not cast votes at all

@@ -1,6 +1,6 @@
 """Train test model.
 
-Author: Jan Quakernack
+Author: Yung-Yu Chen, Jan Quakernack
 
 Note: This module contains parts, which were written for other student projects
 conducted by the author.
@@ -53,8 +53,11 @@ def main():
     device = torch.device(CUDA_DEVICE_NAME) if torch.cuda.is_available() else torch.device('cpu')
 
     dataset = SugarBeetDataset.from_config()
+
     # split into train and test set
-    indices = torch.randperm(len(dataset)).tolist()
+    seed = 0 # get reproducable order
+    random = np.random.RandomState(seed)
+    indices = random.permutation(len(dataset)).tolist()
     dataset_train = torch.utils.data.Subset(dataset, indices[:-size_test_set])
     dataset_test = torch.utils.data.Subset(dataset, indices[-size_test_set:])
 
@@ -199,6 +202,16 @@ def evaluate_on_checkpoint(model, dataset, data_loader_test, epoch, cp_dir, cp_n
         semantic_target_batch = semantic_target_batch.to(device)
         stem_keypoint_target_batch = stem_keypoint_target_batch.to(device)
         stem_offset_target_batch = stem_offset_target_batch.to(device)
+
+        normalization = {
+                   'mean_rgb':dataset.mean_rgb,
+                   'std_rgb':dataset.std_rgb,
+                   'mean_nir':dataset.mean_nir,
+                   'std_nir':dataset.std_nir}
+
+        image_false_color = vis.tensor_to_false_color(input_batch[0, :3], input_batch[0, 3], **normalization)
+
+        cv2.imshow('image', image_false_color)
 
         # foward pass
         semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch, stem_voting_output_batch = model(input_batch)
