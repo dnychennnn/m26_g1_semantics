@@ -3,9 +3,28 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix
 import yaml
 from pathlib import Path
-
+import torch
 from training.postprocessing.semantic_inference import make_classification_map
 
+
+def compute_stem_confusion_matrix(stem_outputs, stem_output_targets, keypoint_radius):
+    """
+    To be confirmed if this implementation is what we want    
+    """
+    cm = np.zeros((2,2), dtype=np.long)
+    
+    
+    for b in range(3):
+        cls_map = np.zeros((432, 322))
+        cls_map_target = np.zeros((432, 322))    
+        stem_output_coords = stem_outputs[b].cpu().detach().numpy()
+        stem_output_target_coords = stem_output_targets[b].cpu().detach().numpy()
+        cls_map[stem_output_coords] = 1
+        cls_map_target[stem_output_target_coords] = 1
+        cm += confusion_matrix(cls_map.flatten(), cls_map_target.flatten(), labels=[0, 1])
+         
+    print(cm)
+    return cm
 
 def compute_confusion_matrix(semantic_output_batch, semantic_target_batch):
     """Note: The input will be a batch.
