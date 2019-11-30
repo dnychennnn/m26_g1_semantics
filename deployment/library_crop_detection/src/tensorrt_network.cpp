@@ -29,9 +29,8 @@ namespace igg {
 
 namespace fs = boost::filesystem;
 
-TensorrtNetwork::TensorrtNetwork(
-    const std::vector<float>& kMean, const std::vector<float>& kStd):
-    mean_{kMean}, std_{kStd} {}
+TensorrtNetwork::TensorrtNetwork(const NetworkParameters& kParameters):
+    mean_{kParameters.mean}, std_{kParameters.std}, kStemInference_{OpencvStemInference({kParameters})} {}
 
 
 TensorrtNetwork::~TensorrtNetwork() {
@@ -104,15 +103,24 @@ void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, con
                           4*this->stem_keypoint_output_width_*this->stem_keypoint_output_height_*this->stem_keypoint_output_channels_,
                           cudaMemcpyDeviceToHost));
 
-  // retrieve stem offset
-  HANDLE_ERROR(cudaMemcpy(result->ServeStemOffsetBuffer(this->stem_offset_output_width_, this->stem_offset_output_height_),
+  // retrieve stem offset x
+  HANDLE_ERROR(cudaMemcpy(result->ServeStemOffsetXBuffer(this->stem_offset_output_width_, this->stem_offset_output_height_),
                           this->device_buffers_[this->stem_offset_output_binding_index_],
-                          4*2*this->stem_keypoint_output_width_*this->stem_keypoint_output_height_*this->stem_keypoint_output_channels_,
+                          4*this->stem_offset_output_width_*this->stem_offset_output_height_,
+                          cudaMemcpyDeviceToHost));
+
+  // retrieve stem offset y
+  HANDLE_ERROR(cudaMemcpy(result->ServeStemOffsetYBuffer(this->stem_offset_output_width_, this->stem_offset_output_height_),
+                          this->device_buffers_[this->stem_offset_output_binding_index_]
+                          +4*this->stem_offset_output_width_*this->stem_offset_output_height_,
+                          4*this->stem_offset_output_width_*this->stem_offset_output_height_,
                           cudaMemcpyDeviceToHost));
 
   context->destroy();
 
-  // TODO postprocessing
+  // postprocessing
+
+  this->kStemInference_.Infer(result);
 
   #endif // TENSORRT_AVAILABLE
 }

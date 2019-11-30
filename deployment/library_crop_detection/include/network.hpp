@@ -17,6 +17,17 @@
 
 namespace igg {
 
+struct NetworkParameters {
+  std::vector<float> mean = {0.386, 0.227, 0.054, 0.220};
+  std::vector<float> std = {0.124, 0.072, 0.0108, 0.066};
+  float keypoint_radius = 15.0;
+  int kernel_size_votes = 5;
+  int kernel_size_peaks = 9;
+  float threshold_votes = 0.001;
+  float threshold_peaks = 0.5;
+};
+
+
 class Network {
 public:
   /*!

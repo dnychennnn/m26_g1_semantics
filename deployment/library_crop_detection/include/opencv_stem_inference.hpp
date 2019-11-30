@@ -11,19 +11,31 @@
 
 namespace igg {
 
+struct StemInferenceParameters {
+
+  StemInferenceParameters(const NetworkParameters kParameters);
+
+  float keypoint_radius = 15.0;
+  int kernel_size_votes = 5;
+  int kernel_size_peaks = 9;
+  float threshold_votes = 0.005;
+  float threshold_peaks = 0.5;
+};
+
+
 class OpencvStemInference {
+
 public:
-  OpencvStemInference(const int kKernelSizeVotes, const int kKernelSizePeaks,
-      const float kThresholdVotes, const float kThresholdPeaks);
+  OpencvStemInference(const StemInferenceParameters& kParameters);
 
   void Infer(NetworkInference* inference) const;
 
 private:
+  const float kKeypointRadius_;
   const int kKernelSizeVotes_;
   const int kKernelSizePeaks_;
   const float kThresholdVotes_;
   const float kThresholdPeaks_;
-
 };
 
 } // namespace igg

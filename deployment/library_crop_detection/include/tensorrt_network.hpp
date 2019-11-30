@@ -18,6 +18,7 @@
 #endif // TENSORRT_AVAILABLE
 
 #include "network.hpp"
+#include "opencv_stem_inference.hpp"
 
 namespace igg {
 
@@ -41,7 +42,7 @@ public:
   /*!
    * Constructor.
    */
-  TensorrtNetwork(const std::vector<float>& kMean, const std::vector<float>& kStd);
+  TensorrtNetwork(const NetworkParameters& kParameters);
 
   ~TensorrtNetwork();
 
@@ -96,6 +97,8 @@ private:
 
   void* host_buffer_ = nullptr; // for input only, memors for results is provided by igg::NetworkInference
   std::vector<void*> device_buffers_; // one for each binding
+
+  const OpencvStemInference kStemInference_;
 
   #ifdef TENSORRT_AVAILABLE
   TensorrtNetworkLogger logger_;
