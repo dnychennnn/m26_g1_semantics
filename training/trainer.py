@@ -15,7 +15,7 @@ from training.dataloader import SugarBeetDataset
 from training.losses import StemClassificationLoss, StemRegressionLoss
 from training import vis
 from training import LOGS_DIR, MODELS_DIR, CUDA_DEVICE_NAME, load_config
-from training.evalmetrics import compute_confusion_matrix, compute_metrics_from_confusion_matrix, plot_confusion_matrix, write_metrics_to_file
+from training.evalmetrics import compute_confusion_matrix, compute_stem_confusion_matrix, compute_metrics_from_confusion_matrix, plot_confusion_matrix, write_metrics_to_file
 from training.postprocessing.stem_inference import StemInference
 
 class Trainer:
@@ -147,7 +147,7 @@ class Trainer:
 
         for epoch_index in range(self.num_epochs):
             accumulated_confusion_matrix_train = np.zeros((3, 3,), dtype=np.long)
-
+            accumulated_confusion_matrix_stem_train = np.zeros((2,2), dtype=np.long)
             for batch_index, batch in enumerate(self.data_loader_train):
                 print('Train batch {}/{} in epoch {}/{}.'.format(batch_index, len(self.data_loader_train), epoch_index, self.num_epochs))
 
@@ -164,7 +164,11 @@ class Trainer:
 
                 # foward pass
                 semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = self.model(input_batch)
-
+                
+                # postprocessing
+                stem_output = self.stem_inference_module(stem_keypoint_output_batch, stem_offset_output_batch)
+                stem_output_target = self.stem_inference_module(stem_keypoint_target_batch, stem_offset_target_batch)
+                
                 # compute losses
                 semantic_loss = self.semantic_loss_weight*\
                                 self.semantic_loss_function(semantic_output_batch,
@@ -193,7 +197,7 @@ class Trainer:
 
                 # accumulate confusion matrix
                 accumulated_confusion_matrix_train += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
-
+                accumulated_confusion_matrix_stem_train += compute_stem_confusion_matrix(stem_output, stem_output_target, self.keypoint_radius)
                 if test_run:
                     break
 
@@ -205,7 +209,7 @@ class Trainer:
                 break
 
 
-    def make_checkpoint(self, accumulated_confusion_matrix_train, test_run):
+    def make_checkpoint(self, accumulated_confusion_matrix_train, acuumulated_confusion_matrix_stem_train,test_run):
         """
         Args:
             accumulated_confusion_matrix_train (np.array): From training phase.
@@ -225,12 +229,15 @@ class Trainer:
         # save accumulated confusion matrix
         print('Save confusion matrix of training.')
         plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_train, normalize=False, filename=self.current_checkpoint_name+'_training.png')
-
+        plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_stem_train, normalize=False,
+        filename=self.current_checkpoint_name+'_stem_training.png')
         # calculate metrics on accumulated confusion matrix
         metrics_train = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_train)
+        metrics_stem_train = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_stem_train)
         print('Calculate metrics of training.')
         write_metrics_to_file(self.current_checkpoint_dir, metrics_train, filename=self.current_checkpoint_name+'_training.yaml')
-
+        write_metrics_to_file(self.current_checkpoint_dir, metrics_stem_train, filename=self.current_checkpoint_name+'_stem_training.yaml')
+        
         self.evaluate_on_checkpoint(test_run=test_run)
 
         self.current_checkpoint_index += 1
@@ -247,7 +254,7 @@ class Trainer:
             examples_dir.mkdir()
 
         accumulated_confusion_matrix_test = np.zeros((3, 3), np.long)
-
+        accumulated_consufion_matrix_stem_test = np.zeros((2,2), np.long)
         for batch_index, batch in enumerate(self.data_loader_test):
             self.model.eval()
 
@@ -266,9 +273,9 @@ class Trainer:
 
             # foward pass
             semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = self.model(input_batch)
-
             # postprocessing
             stem_output = self.stem_inference_module(stem_keypoint_output_batch, stem_offset_output_batch)
+            stem_output_target = self.stem_inference_module(stem_keypoint_target_batch, stem_offset_target_batch)
 
             path_for_plots = examples_dir/'sample_{:02d}'.format(batch_index)
             self.make_plots(path_for_plots,
@@ -281,14 +288,14 @@ class Trainer:
 
             # compute IoU and Accuracy over every batch
             accumulated_confusion_matrix_test += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
-
+            acuumulated_confusion_matrix_stem_test += compute_stem_confustion_matrix(stem_output, stem_output_target, self.keypoint_radius)
             # debug
             if test_run and batch_index==2:
                 break
 
         print('Save confusion matrix of test.')
         plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_test, normalize=False, filename=self.current_checkpoint_name+'_test.png')
-
+        plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_stem_test, normalize=False, filename=self.current_checkpoint_name+'_stem_test.png')
         # calculate metrics on accumulated confusion matrix
         metrics_test = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_test)
         print('Calculate metrics of test.')
