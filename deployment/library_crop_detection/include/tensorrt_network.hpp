@@ -11,6 +11,8 @@
 #include <exception>
 #include <vector>
 
+#include "tensorrt_common.hpp"
+
 #ifdef TENSORRT_AVAILABLE
 #include <NvInfer.h>
 #endif // TENSORRT_AVAILABLE
@@ -92,8 +94,8 @@ private:
   std::vector<float> mean_;
   std::vector<float> std_;
 
-  std::vector<void*> host_buffers_;
-  std::vector<void*> device_buffers_;
+  void* host_buffer_ = nullptr; // for input only, memors for results is provided by igg::NetworkInference
+  std::vector<void*> device_buffers_; // one for each binding
 
   #ifdef TENSORRT_AVAILABLE
   TensorrtNetworkLogger logger_;
@@ -116,18 +118,15 @@ private:
    */
   void ReadBindingsAndAllocateBufferMemory();
 
+  /*
+   * Used to ensure the provided inference object has all the memory we need.
+   */
+  void PrepareInferenceMemory(NetworkInference* inference, const bool kMinimalInference);
+
   void FreeBufferMemory();
 };
 
 
 } // namespace igg
-
-
-#ifndef TENSORRT_AVAILABLE
-#define ASSERT_TENSORRT_AVAILABLE throw std::runtime_error("TensorRT is not available in this build.")
-#else
-#define ASSERT_TENSORRT_AVAILABLE
-#endif // TENSORRT_AVAILABLE
-
 
 #endif // M26_G1_SEMANTICS_DEPLOYMENT_LIBRARY_CROP_DETECTION_INCLUDE_TENSORRT_NETWORK_HPP_

@@ -53,9 +53,13 @@ void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, con
     throw std::runtime_error("Could not create execution context.");
   }
 
-  // resize to network input size
+  // resize input image to network input size
   cv::Mat input;
   cv::resize(kImage, input, cv::Size(this->input_width_, this->input_height_));
+
+  // return resized image as well
+  std::memcpy(result->ServeInputImageBuffer(this->input_width_, this->input_height_),
+      input.ptr(), 4*this->input_width_*this->input_height_);
 
   // to float
   input.convertTo(input, CV_32F);
@@ -66,7 +70,7 @@ void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, con
       for(int channel_index=0; channel_index<this->input_channels_; channel_index++) {
         pixel[channel_index] = (pixel[channel_index]/255.0-this->mean_[channel_index])/this->std_[channel_index];
         const int kBufferIndex = this->input_height_*this->input_width_*channel_index+position[0]*this->input_width_+position[1];
-        (static_cast<float*>(this->host_buffers_[this->input_binding_index_]))[kBufferIndex] = pixel[channel_index];
+        (static_cast<float*>(this->host_buffer_))[kBufferIndex] = pixel[channel_index];
       }
     }
   );
@@ -75,47 +79,40 @@ void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, con
 
   // transfer to device
   HANDLE_ERROR(cudaMemcpy(this->device_buffers_[this->input_binding_index_],
-                          this->host_buffers_[this->input_binding_index_],
+                          this->host_buffer_,
                           4*this->input_width_*this->input_height_*this->input_channels_,
                           cudaMemcpyHostToDevice));
-  HANDLE_ERROR(cudaDeviceSynchronize());
-
-
 
   // pass through network
   context->executeV2(&((this->device_buffers_)[this->input_binding_index_])); // version 2 is without batch size
   HANDLE_ERROR(cudaDeviceSynchronize());
 
   // transfer back to host
-  HANDLE_ERROR(cudaMemcpy(this->host_buffers_[this->semantic_output_binding_index_],
-                          this->device_buffers_[this->semantic_output_binding_index_],
-                          4*this->semantic_output_width_*this->semantic_output_height_*this->semantic_output_channels_,
+
+  // retrieve semantic class confidences
+  for(int class_index=0; class_index<this->semantic_output_channels_; class_index++) {
+    HANDLE_ERROR(cudaMemcpy(result->ServeSemanticClassConfidenceBuffer(class_index, this->semantic_output_width_, this->semantic_output_height_),
+                            this->device_buffers_[this->semantic_output_binding_index_]
+                            +4*class_index*this->semantic_output_height_*this->semantic_output_width_,
+                            4*this->semantic_output_width_*this->semantic_output_height_,
+                            cudaMemcpyDeviceToHost));
+  }
+
+  // retrieve stem keypoint confidence
+  HANDLE_ERROR(cudaMemcpy(result->ServeStemKeypointConfidenceBuffer(this->stem_keypoint_output_width_, this->stem_keypoint_output_height_),
+                          this->device_buffers_[this->stem_keypoint_output_binding_index_],
+                          4*this->stem_keypoint_output_width_*this->stem_keypoint_output_height_*this->stem_keypoint_output_channels_,
                           cudaMemcpyDeviceToHost));
-  HANDLE_ERROR(cudaDeviceSynchronize());
 
-  // get confidences as cv::Mat
-  cv::Mat semantic_output = cv::Mat::zeros(cv::Size(this->semantic_output_width_, this->semantic_output_height_), CV_32FC3);
-
-  semantic_output.forEach<cv::Vec3f>(
-    [&](cv::Vec3f& pixel, const int* position) {
-      for(int channel_index=0; channel_index<this->semantic_output_channels_; channel_index++) {
-        const int kBufferIndex = this->semantic_output_height_*this->semantic_output_width_*channel_index+position[0]*this->semantic_output_width_+position[1];
-        pixel[channel_index] = static_cast<float*>(this->host_buffers_[this->semantic_output_binding_index_])[kBufferIndex];
-      }
-    }
-  );
-
-  std::vector<cv::Mat> semantic_class_confidences;
-  cv::split(semantic_output, semantic_class_confidences);
-
-  cv::imshow("background confidence", semantic_class_confidences[0]);
-  cv::imshow("weed confidence", semantic_class_confidences[1]);
-  cv::imshow("sugar beet confidence", semantic_class_confidences[2]);
-  cv::waitKey(0);
-
-  // TODO postprocessing, put everything in a NetworkInference instance
+  // retrieve stem offset
+  HANDLE_ERROR(cudaMemcpy(result->ServeStemOffsetBuffer(this->stem_offset_output_width_, this->stem_offset_output_height_),
+                          this->device_buffers_[this->stem_offset_output_binding_index_],
+                          4*2*this->stem_keypoint_output_width_*this->stem_keypoint_output_height_*this->stem_keypoint_output_channels_,
+                          cudaMemcpyDeviceToHost));
 
   context->destroy();
+
+  // TODO postprocessing
 
   #endif // TENSORRT_AVAILABLE
 }
@@ -223,7 +220,6 @@ bool TensorrtNetwork::LoadSerialized(const std::string& kFilepath) {
 void TensorrtNetwork::ReadBindingsAndAllocateBufferMemory() {
   ASSERT_TENSORRT_AVAILABLE;
   #ifdef TENSORRT_AVAILABLE
-
   // free whatever is buffered now
   this->FreeBufferMemory();
   // will also clear and shrink the vectors
@@ -239,7 +235,6 @@ void TensorrtNetwork::ReadBindingsAndAllocateBufferMemory() {
     throw std::runtime_error("Unexpected number of bindings: "+std::to_string(kNumBindings));
   }
 
-  this->host_buffers_.reserve(kNumBindings);
   this->device_buffers_.reserve(kNumBindings);
 
   // check the size of each binding
@@ -266,7 +261,6 @@ void TensorrtNetwork::ReadBindingsAndAllocateBufferMemory() {
     std::cout << ") and total size " << binding_size << ".\n";
 
     // allocate host and device memory according to the determined binding size
-    HANDLE_ERROR(cudaMallocHost(&(this->host_buffers_[binding_index]), 4*binding_size)); // 4 bytes per float
     HANDLE_ERROR(cudaMalloc(&(this->device_buffers_[binding_index]), 4*binding_size)); // 4 bytes per float
   }
 
@@ -275,6 +269,12 @@ void TensorrtNetwork::ReadBindingsAndAllocateBufferMemory() {
   this->input_width_ = kInputBindingDimensions.d[3];
   this->input_height_ = kInputBindingDimensions.d[2];
   this->input_channels_ = kInputBindingDimensions.d[1];
+
+  if (this->input_channels_!=4) {
+    throw std::runtime_error("Expected input binding to have four channels.");
+  }
+
+  HANDLE_ERROR(cudaMallocHost(&(this->host_buffer_), 4*this->input_width_*this->input_height_*this->input_channels_)); // 4 bytes per float
 
   this->semantic_output_binding_index_ = this->engine_->getBindingIndex("semantic_output");
   const auto kSemanticOutputBindingDimensions = this->engine_->getBindingDimensions(this->semantic_output_binding_index_);
@@ -288,11 +288,19 @@ void TensorrtNetwork::ReadBindingsAndAllocateBufferMemory() {
   this->stem_keypoint_output_height_ = kStemKeypointOutputBindingDimensions.d[2];
   this->stem_keypoint_output_channels_ = kStemKeypointOutputBindingDimensions.d[1];
 
+  if (this->stem_keypoint_output_channels_!=1) {
+    throw std::runtime_error("Expected binding to have one channel: 'stem_keypoint_output'");
+  }
+
   this->stem_offset_output_binding_index_ = this->engine_->getBindingIndex("stem_offset_output");
   const auto kStemOffsetOutputBindingDimensions = this->engine_->getBindingDimensions(this->stem_offset_output_binding_index_);
   this->stem_offset_output_width_ = kStemOffsetOutputBindingDimensions.d[3];
   this->stem_offset_output_height_ = kStemOffsetOutputBindingDimensions.d[2];
   this->stem_offset_output_channels_ = kStemOffsetOutputBindingDimensions.d[1];
+
+  if (this->stem_offset_output_channels_!=2) {
+    throw std::runtime_error("Expected binding to have two channels: 'stem_offset_output'");
+  }
 
   if (!(this->input_width_==this->semantic_output_width_
         && this->input_width_==this->stem_keypoint_output_width_
@@ -313,13 +321,9 @@ void TensorrtNetwork::ReadBindingsAndAllocateBufferMemory() {
 
 void TensorrtNetwork::FreeBufferMemory() {
   // host
-  for(void* buffer: this->host_buffers_) {
-    #ifdef TENSORRT_AVAILABLE
-    HANDLE_ERROR(cudaFreeHost(buffer));
-    #endif // TENSORRT_AVAILABLE
-  }
-  this->host_buffers_.clear();
-  this->host_buffers_.shrink_to_fit();
+  #ifdef TENSORRT_AVAILABLE
+  HANDLE_ERROR(cudaFreeHost(this->host_buffer_));
+  #endif // TENSORRT_AVAILABLE
 
   // device
   for(void* buffer: this->device_buffers_) {

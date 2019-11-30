@@ -13,21 +13,9 @@
 #include <boost/filesystem.hpp>
 #include <opencv2/core.hpp>
 
+#include "network_inference.hpp"
+
 namespace igg {
-
-struct NetworkInference {
-  std::unique_ptr<cv::Mat> input_image = nullptr;
-  std::unique_ptr<cv::Mat> semantic_class_labels = nullptr;
-  std::unique_ptr<cv::Mat> semantic_class_confidence = nullptr;
-  std::unique_ptr<cv::Mat> stem_keypoint_confidence = nullptr;
-
-  //! Relative to the image scaled to network output.
-  std::unique_ptr<cv::Mat> stem_offset = nullptr;
-
-  //! Relative to the image scaled to network output.
-  std::unique_ptr<std::vector<cv::Vec2f>> stem_positions = nullptr;
-};
-
 
 class Network {
 public:
@@ -39,6 +27,7 @@ public:
    *   Images smaller or larger than the network input size will be scaled to match the desired input site.
    * @param kMinimalInference If true, only return semantic class labels and stem positions
    *   an no other intermediate results (some attributes of NetworkInference will be set to nullptr).
+   *   TODO optional implement this.
    */
   virtual void Infer(NetworkInference* result, const cv::Mat& kImage, const bool kMinimalInference) = 0;
 
