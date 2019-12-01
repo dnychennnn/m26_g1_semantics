@@ -6,7 +6,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Try to build with TensorRT
+set(CUDA_ENABLED TRUE)
 set(TENSORRT_ENABLED TRUE)
+message(STATUS "Enable build with CUDA: ${CUDA_ENABLED}")
 message(STATUS "Enable build with TensorRT: ${TENSORRT_ENABLED}")
 
 # Build type is debug by default
@@ -106,7 +108,11 @@ if(TENSORRT_ENABLED)
   endif(NVONNXPARSER_LIBRARY)
 endif(TENSORRT_ENABLED)
 
-if(TENSORRT_ENABLED AND CUDA_FOUND AND NVINFER_INCLUDE_DIRS AND NVINFER_LIBRARY)
+if(CUDA_ENABLED AND CUDA_FOUND)
+  set(CUDA_AVAILABLE TRUE)
+endif()
+
+if(TENSORRT_ENABLED AND CUDA_AVAILABLE AND NVINFER_INCLUDE_DIRS AND NVINFER_LIBRARY)
   set(TENSORRT_AVAILABLE TRUE)
 endif()
 
@@ -114,7 +120,17 @@ if(TENSORRT_AVAILABLE AND NVONNXPARSER_INCLUDE_DIRS AND NVONNXPARSER_LIBRARY)
   set(TENSORRT_ONNX_PARSER_AVAILABLE TRUE)
 endif()
 
-# Set preprocessor flag to selectively build with TensorRT
+# Set preprocessor flag to selectively build with CUDA and/or TensorRT
+if (CUDA_AVAILABLE)
+  message(STATUS "Build with CUDA.")
+  add_definitions(-DCUDA_AVAILABLE)
+
+  # place for nvcc compiler flags
+  set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS})
+else()
+  message(STATUS "Build without CUDA.")
+endif(CUDA_AVAILABLE)
+
 if(TENSORRT_AVAILABLE)
   message(STATUS "Build with TensorRT.")
   add_definitions(-DTENSORRT_AVAILABLE)

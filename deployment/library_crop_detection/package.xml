@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>library_crop_detection</name>
+  <version>0.1.0</version>
+  <description>Crop detection inside ROS.</description>
+  <maintainer email="s6ynchenk@uni-bonn.de">Yun-Yu Chen</maintainer>
+  <maintainer email="s7jaquak@uni-bonn.de">Jan Quakernack</maintainer>
+  <license>TODO</license>
+  <author email="s6ynchenk@uni-bonn.de">Yun-Yu Chen</author>
+  <author email="s7jaquak@uni-bonn.de">Jan Quakernack</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+</package>

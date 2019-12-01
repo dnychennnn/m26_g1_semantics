@@ -1,0 +1,30 @@
+<launch>
+  <!-- Image topics to extract -->
+  <arg name="rgb_image_topic"
+       default="/camera/jai/rgb/image" />
+  <arg name="nir_image_topic"
+       default="/camera/jai/nir/image" />
+
+  <!-- Output path -->
+  <!--<arg name="output_path"-->
+    <!--default="/tmp/" />-->
+
+  <!-- Bring up image extractor node (saves received images as files) -->
+  <!--<node pkg="image_extractor"-->
+        <!--type="image_extractor_node"-->
+        <!--name="image_extractor_node"-->
+        <!--output="screen">-->
+    <!--<param name="rgb_image_topic" type="string" value="$(arg rgb_image_topic)" />-->
+    <!--<param name="nir_image_topic" type="string" value="$(arg nir_image_topic)" />-->
+    <!--<param name="bagfile_path" type="string" value="$(arg bagfile_path)" />-->
+    <!--<param name="output_path" type="string" value="$(arg output_path)" />-->
+  <!--</node>-->
+
+  <!-- Play back data -->
+  <!--<node pkg="rosbag"-->
+        <!--type="play"-->
+        <!--name="rosbag_play_node"-->
+        <!--output="screen"-->
+        <!--args="$(arg bagfile_path) --delay=3"/>-->
+  <!-- Start with 3 seconds delay after advertising topics -->
+</launch>
