@@ -148,6 +148,7 @@ class Trainer:
         for epoch_index in range(self.num_epochs):
             accumulated_confusion_matrix_train = np.zeros((3, 3,), dtype=np.long)
             accumulated_confusion_matrix_stem_train = np.zeros((2,2), dtype=np.long)
+            mean_mean_dev_train = 0
             for batch_index, batch in enumerate(self.data_loader_train):
                 print('Train batch {}/{} in epoch {}/{}.'.format(batch_index, len(self.data_loader_train), epoch_index, self.num_epochs))
 
@@ -197,19 +198,21 @@ class Trainer:
 
                 # accumulate confusion matrix
                 accumulated_confusion_matrix_train += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
-                accumulated_confusion_matrix_stem_train += compute_stem_confusion_matrix(stem_output, stem_output_target, self.keypoint_radius)
+                stem_cm_train, mean_dev_train =  compute_stem_confusion_matrix(stem_output, stem_output_target, self.keypoint_radius)
+                accumulated_confusion_matrix_stem_train += stem_cm_train
+                mean_mean_dev_train += mean_dev_train
                 if test_run:
                     break
 
             # end of epoch
             print('End of epoch. Make checkpoint. Evaluate.')
-            self.make_checkpoint(accumulated_confusion_matrix_train, test_run=test_run)
+            self.make_checkpoint(accumulated_confusion_matrix_train, accumulated_confusion_matrix_stem_train, test_run=test_run)
 
             if test_run:
                 break
 
 
-    def make_checkpoint(self, accumulated_confusion_matrix_train, acuumulated_confusion_matrix_stem_train,test_run):
+    def make_checkpoint(self, accumulated_confusion_matrix_train, accumulated_confusion_matrix_stem_train,test_run):
         """
         Args:
             accumulated_confusion_matrix_train (np.array): From training phase.
@@ -225,18 +228,20 @@ class Trainer:
         # TODO (optional) only save best model to save some space
         weights_path = self.current_checkpoint_dir/(self.current_checkpoint_name+'.pth')
         torch.save(self.model.state_dict(), str(weights_path))
+        #traced_weights_path = self.current_checkpoint_dir/('traced_'+self.current_checkpoint_name+'.pth')
+        #traced_model = torch.jit.script(self.model)
+        #traced_model.save(traced_weights_path)
 
         # save accumulated confusion matrix
         print('Save confusion matrix of training.')
         plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_train, normalize=False, filename=self.current_checkpoint_name+'_training.png')
-        plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_stem_train, normalize=False,
-        filename=self.current_checkpoint_name+'_stem_training.png')
+        plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_stem_train, normalize=False, class_names=['+', '-'], filename=self.current_checkpoint_name+'_stem_training.png')
         # calculate metrics on accumulated confusion matrix
         metrics_train = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_train)
         metrics_stem_train = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_stem_train)
         print('Calculate metrics of training.')
         write_metrics_to_file(self.current_checkpoint_dir, metrics_train, filename=self.current_checkpoint_name+'_training.yaml')
-        write_metrics_to_file(self.current_checkpoint_dir, metrics_stem_train, filename=self.current_checkpoint_name+'_stem_training.yaml')
+        write_metrics_to_file(self.current_checkpoint_dir, metrics_stem_train, class_names=['+', '-'], filename=self.current_checkpoint_name+'_stem_training.yaml')
         
         self.evaluate_on_checkpoint(test_run=test_run)
 
@@ -255,6 +260,7 @@ class Trainer:
 
         accumulated_confusion_matrix_test = np.zeros((3, 3), np.long)
         accumulated_consufion_matrix_stem_test = np.zeros((2,2), np.long)
+        mean_mean_dev_test = 0
         for batch_index, batch in enumerate(self.data_loader_test):
             self.model.eval()
 
@@ -288,19 +294,23 @@ class Trainer:
 
             # compute IoU and Accuracy over every batch
             accumulated_confusion_matrix_test += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
-            acuumulated_confusion_matrix_stem_test += compute_stem_confustion_matrix(stem_output, stem_output_target, self.keypoint_radius)
+            stem_cm_test, mean_dev_test = compute_stem_confustion_matrix(stem_output, stem_output_target, self.keypoint_radius)[0]
+            acuumulated_confusion_matrix_stem_test += stem_cm_test
+            mean_mean_dev_test += mean_dev_test
             # debug
             if test_run and batch_index==2:
                 break
 
         print('Save confusion matrix of test.')
         plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_test, normalize=False, filename=self.current_checkpoint_name+'_test.png')
-        plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_stem_test, normalize=False, filename=self.current_checkpoint_name+'_stem_test.png')
+        plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_stem_test, normalize=False, class_names=['+', '-'], filename=self.current_checkpoint_name+'_stem_test.png')
         # calculate metrics on accumulated confusion matrix
         metrics_test = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_test)
+        metrics_stem_test = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_test)
         print('Calculate metrics of test.')
         write_metrics_to_file(self.current_checkpoint_dir, metrics_test, filename=self.current_checkpoint_name+'_test.yaml')
-
+        write_metrics_to_file(self.current_checkpoint_dir, metrics_stem_test, class_names=['+', '-'], filename=self.current_checkpoint_name+'_stem_test.yaml')       
+ 
         mean_accuracy = np.mean(np.asarray(metrics_test['accuracy'])[1:]) # without background
         mean_iou = np.mean(np.asarray(metrics_test['iou'])[1:]) # without background
 
@@ -312,7 +322,8 @@ class Trainer:
         print("  Accuracy 'background': {:04f}".format(metrics_test['accuracy'][0]))
         print("  Accuracy 'weed': {:04f}".format(metrics_test['accuracy'][1]))
         print("  Accuracy 'sugar beet': {:04f}".format(metrics_test['accuracy'][2]))
-
+        print("  Accuracy 'stem detection': {:04f}".format(metrics_stem_test['accuracy'][0]))
+        print("  Mean Deviation 'stem deteiction': {:04f}".format(mean_mean_dev_test / self.size_test_set))
 
     def make_plots(self, path, input_slice, semantic_output, stem_keypoint_output, stem_offset_output, stem_output, test_run):
         """Make plots and write images.
