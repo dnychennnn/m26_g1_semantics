@@ -1,4 +1,10 @@
 #include "network_inference.hpp"
+#include <iostream>
+
+#include <opencv2/core.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 
 namespace igg {
 
@@ -142,9 +148,44 @@ std::vector<cv::Vec2f> NetworkInference::StemPositions() {
 }
 
 
-cv::Mat NetworkInference::PlotSemanticClassConfidences() {
-  cv::Mat background = this->InputImageAsFalseColorBgr();
+cv::Mat NetworkInference::MakePlot() {
+  cv::Mat image = this->InputImageAsFalseColorBgr();
+  cv::Mat gray;
+  cv::cvtColor(image, gray, CV_BGR2GRAY);
+  gray.convertTo(gray, CV_32FC1);
+  gray /= 255.0;
 
+  cv::Mat blue(gray.clone());
+  cv::Mat green(gray.clone());
+  cv::Mat red(gray.clone());
+
+  cv::Mat weed_confidence = this->SemanticClassConfidence(1);
+  cv::Mat sugar_beet_confidence = this->SemanticClassConfidence(2);
+
+  blue += 0.5*sugar_beet_confidence;
+  red += 0.5*weed_confidence;
+  green += 0.5*weed_confidence;
+
+  cv::Mat plot;
+  std::vector<cv::Mat> channels = {blue, green, red};
+  cv::merge(channels, plot);
+
+  cv::Mat markers = cv::Mat::zeros(plot.rows, plot.cols, CV_32FC3);
+
+  cv::Scalar color = cv::Scalar(1.0, 1.0, 1.0);
+  int radius = 15;
+  for(cv::Vec2f position: this->stem_positions_) {
+    int x = position[0];
+    int y = position[1];
+    cv::circle(markers, cv::Point(x, y), radius, color, 1);
+    cv::line(markers, cv::Point(x, y+radius), cv::Point(x, y+radius-10), color, 1);
+    cv::line(markers, cv::Point(x, y-radius), cv::Point(x, y-radius+10), color, 1);
+    cv::line(markers, cv::Point(x+radius, y), cv::Point(x+radius-10, y), color, 1);
+    cv::line(markers, cv::Point(x-radius, y), cv::Point(x-radius+10, y), color, 1);
+  }
+
+  plot += 0.5*markers;
+  return plot;
 }
 
 } // namespace igg

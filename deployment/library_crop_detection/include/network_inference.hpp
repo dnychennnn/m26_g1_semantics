@@ -58,7 +58,7 @@ public:
   /*
    * Helpers for plotting.
    */
-  cv::Mat PlotSemanticClassConfidences();
+  cv::Mat MakePlot();
 
 private:
   cv::Mat input_image_;

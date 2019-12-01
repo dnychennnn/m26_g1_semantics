@@ -45,6 +45,6 @@ int main() {
   cv::imshow("weed_confidence", result.SemanticClassConfidence(1));
   cv::imshow("sugar_beet_confidence", result.SemanticClassConfidence(2));
   cv::imshow("stem_keypoint_confidence", result.StemKeypointConfidence());
-  //cv::imshow("stem_offset", result.StemOffset());
+  cv::imshow("all", result.MakePlot());
   cv::waitKey(0);
 }
