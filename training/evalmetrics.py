@@ -9,22 +9,37 @@ from training.postprocessing.semantic_inference import make_classification_map
 
 def compute_stem_confusion_matrix(stem_outputs, stem_output_targets, keypoint_radius):
     """
-    To be confirmed if this implementation is what we want    
+    return: confusion matrix over batch, mean deviation
     """
-    cm = np.zeros((2,2), dtype=np.long)
+    cm = np.zeros((2,2), dtype=np.int)
+    accum_cm = np.zeros((2,2), dtype=np.int)
+    total_count = 0
+    valid_dev_count = 0
+    accum_deviation = 0
     
-    
-    for b in range(3):
-        cls_map = np.zeros((432, 322))
-        cls_map_target = np.zeros((432, 322))    
+    for b in range(len(stem_outputs)):
+        # get detection information
+        preds_count = stem_outputs[b].shape[0]
+        targets_count = stem_output_targets[b].shape[0]     
+        batch_count = preds_count * targets_count
+        total_count += batch_count
         stem_output_coords = stem_outputs[b].cpu().detach().numpy()
         stem_output_target_coords = stem_output_targets[b].cpu().detach().numpy()
-        cls_map[stem_output_coords] = 1
-        cls_map_target[stem_output_target_coords] = 1
-        cm += confusion_matrix(cls_map.flatten(), cls_map_target.flatten(), labels=[0, 1])
-         
-    print(cm)
-    return cm
+ 
+        distances = np.linalg.norm( (stem_output_coords - stem_output_target_coords[:, None]), axis=2)
+        # calculate deviation for true positives
+        if distances[distances <= keypoint_radius].size != 0:
+            deviation = np.mean(distances[distances <= keypoint_radius])
+            accum_deviation += deviation          
+            valid_dev_count += 1
+ 
+        true_positives = np.sum((distances <= keypoint_radius))
+        false_positives = np.sum(distances > keypoint_radius)
+        false_negatives = (np.sum((distances <= keypoint_radius), axis=1) == 0).sum()
+        cm += np.array([[true_positives,  false_positives], [false_negatives,  0]])
+            
+    
+    return cm, accum_deviation / valid_dev_count
 
 def compute_confusion_matrix(semantic_output_batch, semantic_target_batch):
     """Note: The input will be a batch.
