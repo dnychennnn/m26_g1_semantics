@@ -52,10 +52,16 @@ Training parameters are defined in `training/configs/training.yaml`. To train wi
 python training/script/train.py
 ```
 
-Or if you just want to do a quick check:
+If you just want to do a quick check with some output:
 
 ```
 python training/script/train.py --test-run
+```
+
+If you want to do evaluation only:
+
+```
+python training/script/train.py --only-eval
 ```
 
 ### Deployment phase

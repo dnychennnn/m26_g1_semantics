@@ -3,8 +3,71 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix
 import yaml
 from pathlib import Path
-
+import torch
 from training.postprocessing.semantic_inference import make_classification_map
+
+def compute_stem_metrics(stem_position_output, stem_position_target, tolerance_radius):
+    """Compute metrics for evaluation of the stem detection.
+
+    Count a true positive for each predicted stem if an actual stem is within tolerance_radius.
+    Count a false positive for each predicted stem if no actual stem is within tolerance_radius.
+    Count a false negative for each actual stem if no predicted stem is within tolerance_radius.
+
+    For all true positives sum up the deviation from the actual stem position.
+
+    Returns:
+        A tuple of confusion matrix and accumulated deviation.
+    """
+
+    stem_confusion_matrix = np.zeros((2, 2,), dtype=np.int)
+    accum_deviation = 0
+    batch_size = len(stem_position_output)
+
+    # compute metrics for each batch
+    for index_in_batch in range(batch_size):
+        # get count of predicted and actual stems
+        output_count = stem_position_output[index_in_batch].shape[0]
+        target_count = stem_position_target[index_in_batch].shape[0]
+
+        # bring stem position to numpy
+        stem_output_coords = stem_position_output[index_in_batch].cpu().detach().numpy()
+        stem_target_coords = stem_position_target[index_in_batch].cpu().detach().numpy()
+
+        if output_count>0 and target_count>0:
+            # using numpy broadcasting
+            differences = stem_output_coords[:, None, :]-stem_target_coords[None, :, :]
+            distances = np.linalg.norm(differences, axis=-1)
+            min_distances_per_output = np.amin(distances, axis=1)
+            min_distances_per_target = np.amin(distances, axis=0)
+
+            # calculate deviation for true positives
+
+            is_true_positive = min_distances_per_output<=tolerance_radius
+            accum_deviation += np.sum(min_distances_per_output[is_true_positive])
+
+            true_positives = np.sum(is_true_positive)
+            false_positives = np.sum(min_distances_per_output>tolerance_radius) # the stems we hit wrongly
+            false_negatives = np.sum(min_distances_per_target>tolerance_radius) # the stems we missed
+            # true_negatives not well defined
+        elif output_count>0:
+            # we do only have false positives
+            true_positives = 0
+            false_positives = output_count
+            false_negatives = 0
+        elif target_count>0:
+            # we do only have false negatives
+            true_positives = 0
+            false_positives = 0
+            false_negatives = target_count
+        else:
+            # we have nothing except true_negatives which are not well defined
+            true_positives = 0
+            false_positives = 0
+            false_negatives = 0
+
+        stem_confusion_matrix += np.array([[true_positives,  false_positives], [false_negatives,  0]])
+
+    return stem_confusion_matrix, accum_deviation
 
 
 def compute_confusion_matrix(semantic_output_batch, semantic_target_batch):
