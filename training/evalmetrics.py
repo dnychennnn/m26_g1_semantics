@@ -6,11 +6,6 @@ from pathlib import Path
 import torch
 from training.postprocessing.semantic_inference import make_classification_map
 
-# REVIEW this function does two things: confusion matrix and mean deviation
-# REVIEW therefore renamed into 'compute_stem_metrics'
-# REVIEW the keypoint readius we use should be independent of deviation
-# REVIEW of the stem position we tolerate, so rename 'keypoint_radius' to 'tolerance_radius'
-# REVIEW rename 'stem_output_targets' into 'stem_position_targets' as they are no outputs of the network
 def compute_stem_metrics(stem_position_output, stem_position_target, tolerance_radius):
     """Compute metrics for evaluation of the stem detection.
 
@@ -25,46 +20,27 @@ def compute_stem_metrics(stem_position_output, stem_position_target, tolerance_r
     """
 
     stem_confusion_matrix = np.zeros((2, 2,), dtype=np.int)
-    # accum_cm = np.zeros((2,2), dtype=np.int) # REVIEW this is unused
-    # total_count = 0 # REVIEW this is unused
     accum_deviation = 0
-    # REVIEW not necessary, equals the number of true prositives, which we can get from the confusion matrix
-    # valid_dev_count = 0
-
     batch_size = len(stem_position_output)
 
-    # REVIEW make index variable a bit more informative, change from 'b' to 'index_in_batch'
     # compute metrics for each batch
     for index_in_batch in range(batch_size):
         # get count of predicted and actual stems
         output_count = stem_position_output[index_in_batch].shape[0]
         target_count = stem_position_target[index_in_batch].shape[0]
 
-        # batch_count = preds_count * targets_count # REVIEW this is unused
-        # total_count += batch_count # REVIEW this is unused
-
         # bring stem position to numpy
         stem_output_coords = stem_position_output[index_in_batch].cpu().detach().numpy()
         stem_target_coords = stem_position_target[index_in_batch].cpu().detach().numpy()
-
-        # REVIEW instead compute the distance between all output-target pairs and select the minimum
-        # distances = np.linalg.norm( (stem_output_coords - stem_output_target_coords[:, None]), axis=2)
 
         if output_count>0 and target_count>0:
             # using numpy broadcasting
             differences = stem_output_coords[:, None, :]-stem_target_coords[None, :, :]
             distances = np.linalg.norm(differences, axis=-1)
-
             min_distances_per_output = np.amin(distances, axis=1)
             min_distances_per_target = np.amin(distances, axis=0)
 
             # calculate deviation for true positives
-
-            # REVIEW use numpy vectorization
-            # if distances[distances <= keypoint_radius].size != 0:
-                # deviation = np.mean(distances[distances <= keypoint_radius])
-                # accum_deviation += deviation
-                # valid_dev_count += 1
 
             is_true_positive = min_distances_per_output<=tolerance_radius
             accum_deviation += np.sum(min_distances_per_output[is_true_positive])
