@@ -160,7 +160,7 @@ def make_plot_from_stem_keypoint_offset_output(input_rgb, input_nir, stem_keypoi
     return plot
 
 
-def make_plot_from_stem_output(input_rgb, input_nir, stem_output, keypoint_radius, **normalization):
+def make_plot_from_stem_output(input_rgb, input_nir, stem_position_output, stem_position_target, keypoint_radius, **normalization):
     """
     Note: This function contains parts, which were written for other student projects
     conducted by the author.
@@ -169,23 +169,37 @@ def make_plot_from_stem_output(input_rgb, input_nir, stem_output, keypoint_radiu
 
     height, width = image.shape[:2]
 
-    while len(stem_output.shape)>2:
-        stem_output = stem_output[0]
+    if stem_position_output is not None:
+        while len(stem_position_output.shape)>2:
+            stem_position_output = stem_position_output[0]
+
+    if stem_position_target is not None:
+        while len(stem_position_target.shape)>2:
+            stem_position_target = stem_position_target[0]
 
     plot = image
 
     markers = np.zeros((height, width, 3,), dtype=np.float)
 
-    # draw a marker at each stem positions
-    for position in stem_output:
-        x, y = position[1], position[0]
-        cv2.circle(markers, (x, y), keypoint_radius, (1.0, 1.0, 1.0), 1)
-        cv2.line(markers, (x, y+keypoint_radius), (x, y+keypoint_radius-10), (1.0, 1.0, 1.0), 1)
-        cv2.line(markers, (x, y-keypoint_radius), (x, y-keypoint_radius+10), (1.0, 1.0, 1.0), 1)
-        cv2.line(markers, (x+keypoint_radius, y), (x+keypoint_radius-10, y), (1.0, 1.0, 1.0), 1)
-        cv2.line(markers, (x-keypoint_radius, y), (x-keypoint_radius+10, y), (1.0, 1.0, 1.0), 1)
+    def draw_marker(x, y, color, thickness):
+        cv2.circle(markers, (x, y), keypoint_radius, color, thickness)
+        cv2.line(markers, (x, y+keypoint_radius), (x, y+keypoint_radius-10), color, thickness)
+        cv2.line(markers, (x, y-keypoint_radius), (x, y-keypoint_radius+10), color, thickness)
+        cv2.line(markers, (x+keypoint_radius, y), (x+keypoint_radius-10, y), color, thickness)
+        cv2.line(markers, (x-keypoint_radius, y), (x-keypoint_radius+10, y), color, thickness)
 
-    plot = plot+0.5*markers
+    # draw a marker at each stem positions
+    if stem_position_target is not None:
+        for position in stem_position_target:
+            x, y = position[1], position[0]
+            draw_marker(x, y, (0.75, 0.0, 0.0), 2)
+
+    if stem_position_output is not None:
+        for position in stem_position_output:
+            x, y = position[1], position[0]
+            draw_marker(x, y, (0.5, 0.5, 0.5), 1)
+
+    plot = plot+1.0*markers
     plot = np.clip(plot, 0.0, 1.0)
 
     return plot

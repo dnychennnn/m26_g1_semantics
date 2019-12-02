@@ -6,40 +6,93 @@ from pathlib import Path
 import torch
 from training.postprocessing.semantic_inference import make_classification_map
 
+# REVIEW this function does two things: confusion matrix and mean deviation
+# REVIEW therefore renamed into 'compute_stem_metrics'
+# REVIEW the keypoint readius we use should be independent of deviation
+# REVIEW of the stem position we tolerate, so rename 'keypoint_radius' to 'tolerance_radius'
+# REVIEW rename 'stem_output_targets' into 'stem_position_targets' as they are no outputs of the network
+def compute_stem_metrics(stem_position_output, stem_position_target, tolerance_radius):
+    """Compute metrics for evaluation of the stem detection.
 
-def compute_stem_confusion_matrix(stem_outputs, stem_output_targets, keypoint_radius):
+    Count a true positive for each predicted stem if an actual stem is within tolerance_radius.
+    Count a false positive for each predicted stem if not actual stem is within tolerance_radius.
+    Count a false negative for each actual stem if no predicted stem is within tolerance_radius.
+
+    For all true positives sum up the deviation from the actual stem position.
+
+    Returns:
+        A tuple of confusion matrix and accumulated deviation.
     """
-    return: confusion matrix over batch, mean deviation
-    """
-    cm = np.zeros((2,2), dtype=np.int)
-    accum_cm = np.zeros((2,2), dtype=np.int)
-    total_count = 0
-    valid_dev_count = 0
+
+    stem_confusion_matrix = np.zeros((2, 2,), dtype=np.int)
+    # accum_cm = np.zeros((2,2), dtype=np.int) # REVIEW this is unused
+    # total_count = 0 # REVIEW this is unused
     accum_deviation = 0
-    
-    for b in range(len(stem_outputs)):
-        # get detection information
-        preds_count = stem_outputs[b].shape[0]
-        targets_count = stem_output_targets[b].shape[0]     
-        batch_count = preds_count * targets_count
-        total_count += batch_count
-        stem_output_coords = stem_outputs[b].cpu().detach().numpy()
-        stem_output_target_coords = stem_output_targets[b].cpu().detach().numpy()
- 
-        distances = np.linalg.norm( (stem_output_coords - stem_output_target_coords[:, None]), axis=2)
-        # calculate deviation for true positives
-        if distances[distances <= keypoint_radius].size != 0:
-            deviation = np.mean(distances[distances <= keypoint_radius])
-            accum_deviation += deviation          
-            valid_dev_count += 1
- 
-        true_positives = np.sum((distances <= keypoint_radius))
-        false_positives = np.sum(distances > keypoint_radius)
-        false_negatives = (np.sum((distances <= keypoint_radius), axis=1) == 0).sum()
-        cm += np.array([[true_positives,  false_positives], [false_negatives,  0]])
-            
-    
-    return cm, accum_deviation / valid_dev_count
+    # REVIEW not necessary, equals the number of true prositives, which we can get from the confusion matrix
+    # valid_dev_count = 0
+
+    batch_size = len(stem_position_output)
+
+    # REVIEW make index variable a bit more informative, change from 'b' to 'index_in_batch'
+    # compute metrics for each batch
+    for index_in_batch in range(batch_size):
+        # get count of predicted and actual stems
+        output_count = stem_position_output[index_in_batch].shape[0]
+        target_count = stem_position_target[index_in_batch].shape[0]
+
+        # batch_count = preds_count * targets_count # REVIEW this is unused
+        # total_count += batch_count # REVIEW this is unused
+
+        # bring stem position to numpy
+        stem_output_coords = stem_position_output[index_in_batch].cpu().detach().numpy()
+        stem_target_coords = stem_position_target[index_in_batch].cpu().detach().numpy()
+
+        # REVIEW instead compute the distance between all output-target pairs and select the minimum
+        # distances = np.linalg.norm( (stem_output_coords - stem_output_target_coords[:, None]), axis=2)
+
+        if output_count>0 and target_count>0:
+            # using numpy broadcasting
+            differences = stem_output_coords[:, None, :]-stem_target_coords[None, :, :]
+            distances = np.linalg.norm(differences, axis=-1)
+
+            min_distances_per_output = np.amin(distances, axis=1)
+            min_distances_per_target = np.amin(distances, axis=0)
+
+            # calculate deviation for true positives
+
+            # REVIEW use numpy vectorization
+            # if distances[distances <= keypoint_radius].size != 0:
+                # deviation = np.mean(distances[distances <= keypoint_radius])
+                # accum_deviation += deviation
+                # valid_dev_count += 1
+
+            is_true_positive = min_distances_per_output<=tolerance_radius
+            accum_deviation += np.sum(min_distances_per_output[is_true_positive])
+
+            true_positives = np.sum(is_true_positive)
+            false_positives = np.sum(min_distances_per_output>tolerance_radius) # the stems we hit wrongly
+            false_negatives = np.sum(min_distances_per_target>tolerance_radius) # the stems we missed
+            # true_negatives not well defined
+        elif output_count>0:
+            # we do only have false positives
+            true_positives = 0
+            false_positives = output_count
+            false_negatives = 0
+        elif target_count>0:
+            # we do only have false negatives
+            true_positives = 0
+            false_positives = 0
+            false_negatives = target_count
+        else:
+            # we have nothing except true_negatives which are not well defined
+            true_positives = 0
+            false_positives = 0
+            false_negatives = 0
+
+        stem_confusion_matrix += np.array([[true_positives,  false_positives], [false_negatives,  0]])
+
+    return stem_confusion_matrix, accum_deviation
+
 
 def compute_confusion_matrix(semantic_output_batch, semantic_target_batch):
     """Note: The input will be a batch.

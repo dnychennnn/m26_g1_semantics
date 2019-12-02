@@ -14,6 +14,10 @@ from pathlib import Path
 
 from training import load_config, DATA_DIR
 
+# if we are using pytorch dataloaders, all targets need to have the same size
+# so we pad the stem_position_target with zeros to be of shape (MAX_STEM_COUNT, 2)
+MAX_STEM_COUNT = 128
+
 
 class SugarBeetDataset(Dataset):
     """
@@ -189,15 +193,15 @@ class SugarBeetDataset(Dataset):
         stem_positions = SugarBeetDataset._get_stem_positions_from_annotaions_dict(annotations_dict)
 
         # scale stem positions to target size
-        target_stem_positions = [(x*target_scale_factor_x, y*target_scale_factor_y)
+        stem_position_target = [(x*target_scale_factor_x, y*target_scale_factor_y)
                                  for x,y in stem_positions]
-
-        stem_keypoint_target, stem_offset_target = self._make_stem_target(target_stem_positions)
-
-        stem_target = self._make_stem_target(target_stem_positions)
+        stem_position_target = np.array(stem_position_target, dtype=np.float32)
 
         # random transformations
         # TODO keep in mind that we need to be able to transform stem positions (x, y) in the same way
+
+        # get keypoint mask and offsets
+        stem_keypoint_target, stem_offset_target = self._make_stem_target(stem_position_target)
 
         # convert input images to tensors
         rgb_tensor = self.pil_to_tensor(rgb_image) # shape (3, input_height, input_width,)
@@ -216,7 +220,22 @@ class SugarBeetDataset(Dataset):
         stem_keypoint_target_tensor = torch.from_numpy(stem_keypoint_target) # shape (1, target_height, target_width,)
         stem_offset_target_tensor = torch.from_numpy(stem_offset_target) # shape (2, target_height, target_width,)
 
-        return input_tensor, semantic_target_tensor, stem_keypoint_target_tensor, stem_offset_target_tensor
+        # get the stem count and append zeros to stem_position_target
+        # so all loaded tensors have the same shape
+        stem_count_target = stem_position_target.shape[0]
+        stem_count_target_tensor = torch.tensor(stem_count_target)
+
+        if stem_count_target>0:
+            stem_position_target = np.append(stem_position_target, np.zeros((MAX_STEM_COUNT-stem_count_target, 2,), dtype=np.float32), axis=0)
+            # put position coordinates in y, x to be consistent with what we use in the interference part
+            # TODO use this order right from the beginning
+        else:
+            stem_position_target = np.zeros((MAX_STEM_COUNT, 2,), dtype=np.float32)
+
+        stem_position_target_tensor = torch.from_numpy(np.stack([stem_position_target[:, 1], stem_position_target[:, 0]], axis=1))
+
+        # TODO provide this as a dict
+        return input_tensor, semantic_target_tensor, stem_keypoint_target_tensor, stem_offset_target_tensor, stem_position_target_tensor, stem_count_target_tensor
 
 
     def _make_semantic_target(self, semantic_label):
@@ -249,32 +268,34 @@ class SugarBeetDataset(Dataset):
           return []
 
 
-    def _make_stem_target(self, target_stem_positions):
+    def _make_stem_target(self, stem_position_target):
         """Construct keypoint mask and offset vectors for mixed classification and regression.
 
         Args:
-            target_stem_positions (list): A list of (x, y) tuples. These are
-            stem positions already transformed to pixel corrdinates in target.
+            stem_position_target (list or np.array): A list of (x, y) tuples.
+            Or a np.array of shape (N, 2), These are stem positions already
+            transformed to pixel corrdinates in target.
 
         Returns:
             A tuple of the classification target of shape (target_height, target_width,)
             as an float numpy.array and regression target of shape
             (2, target_height, target_width,) as a float numpy.array.
         """
-        keypoint_target = self._make_stem_classification_target(target_stem_positions)
-        offset_target = self._make_stem_regression_target(target_stem_positions)
+        keypoint_target = self._make_stem_classification_target(stem_position_target)
+        offset_target = self._make_stem_regression_target(stem_position_target)
 
         return keypoint_target, offset_target
 
 
-    def _make_stem_classification_target(self, target_stem_positions):
+    def _make_stem_classification_target(self, stem_position_target):
         """Construct keypoint mask from stem positions.
 
         Will put a disk with the keypoint_radius at each stem position.
 
         Args:
-            target_stem_positions (list): A list of (x, y) tuples. These are
-            stem positions already transformed to pixel corrdinates in target.
+            stem_position_target (list or np.array): A list of (x, y) tuples.
+            Or a np.array of shape (N, 2), These are stem positions already
+            transformed to pixel corrdinates in target.
 
         Returns:
             A keypoint masks of shape (target_height, target_width,) as an
@@ -282,7 +303,7 @@ class SugarBeetDataset(Dataset):
         """
         keypoint_target = np.zeros((self.target_height, self.target_width,), dtype=np.float32)
 
-        for stem_x, stem_y in target_stem_positions:
+        for stem_x, stem_y in stem_position_target:
             # put a disk with keypoint_radius at each stem position for classification target
             cv2.circle(keypoint_target,
                        (int(np.round(stem_x)), int(np.round(stem_y))),
@@ -299,7 +320,7 @@ class SugarBeetDataset(Dataset):
         return keypoint_target
 
 
-    def _make_stem_regression_target(self, target_stem_positions):
+    def _make_stem_regression_target(self, stem_position_target):
         """Construct offset vectors from stem positions.
 
         Offsets are normalized by keypoint_radius and clipped to be in
@@ -307,14 +328,15 @@ class SugarBeetDataset(Dataset):
         only (in case two keypoints overlap).
 
         Args:
-            target_stem_positions (list): A list of (x, y) tuples. These are
-            stem positions already transformed to pixel corrdinates in target.
+            stem_position_target (list or np.array): A list of (x, y) tuples.
+            Or a np.array of shape (N, 2), These are stem positions already
+            transformed to pixel corrdinates in target.
 
         Returns:
             A float32 numpy.array of shape (2, target_height, target_width,)
             with x and y offsets for each pixel.
         """
-        num_stems = len(target_stem_positions)
+        num_stems = len(stem_position_target)
         if num_stems==0:
             # no stems, return zeros
             return np.zeros((2, self.target_height, self.target_width), dtype=np.float32)
@@ -324,9 +346,9 @@ class SugarBeetDataset(Dataset):
         ys = np.arange(self.target_height, dtype=np.float32).reshape(1, self.target_height, 1)
 
         # x, y, for all stems
-        target_stem_positions = np.array(target_stem_positions, dtype=np.float32)
-        stem_xs = (target_stem_positions[:, 0]).reshape(num_stems, 1, 1)
-        stem_ys = (target_stem_positions[:, 1]).reshape(num_stems, 1, 1)
+        stem_position_target = np.array(stem_position_target, dtype=np.float32)
+        stem_xs = (stem_position_target[:, 0]).reshape(num_stems, 1, 1)
+        stem_ys = (stem_position_target[:, 1]).reshape(num_stems, 1, 1)
 
         # compute offset using broadcasting
         offsets_x = stem_xs-xs
