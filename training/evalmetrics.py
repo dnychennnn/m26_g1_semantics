@@ -15,7 +15,7 @@ def compute_stem_metrics(stem_position_output, stem_position_target, tolerance_r
     """Compute metrics for evaluation of the stem detection.
 
     Count a true positive for each predicted stem if an actual stem is within tolerance_radius.
-    Count a false positive for each predicted stem if not actual stem is within tolerance_radius.
+    Count a false positive for each predicted stem if no actual stem is within tolerance_radius.
     Count a false negative for each actual stem if no predicted stem is within tolerance_radius.
 
     For all true positives sum up the deviation from the actual stem position.
