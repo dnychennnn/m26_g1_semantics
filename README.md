@@ -64,6 +64,20 @@ If you want to do evaluation only:
 python training/script/train.py --only-eval
 ```
 
+#### Freeze a model to deploy
+
+As .onnx to load with TensorRT:
+
+```
+python training/scripts/export_model.py -t onnx
+```
+
+As .pt to load with Pytorch/Torch:
+
+```
+python training/scripts/export_model.py -t pt
+```
+
 ### Deployment phase
 
 #### Setup

@@ -359,7 +359,7 @@ class Trainer:
         metrics_test = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_test)
 
         # TODO we do not have a valid number of false negatives for stem detection, so some metrics computed here will not be valid
-        metrics_stem_test = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_test)
+        metrics_stem_test = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_stem_test)
 
         print('Calculate metrics of test.')
         write_metrics_to_file(self.current_checkpoint_dir, metrics_test, filename=self.current_checkpoint_name+'_test.yaml')
