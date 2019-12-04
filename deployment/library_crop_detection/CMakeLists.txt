@@ -46,6 +46,7 @@ endif(OpenCV_FOUND)
 
 # Find Boost
 find_package(Boost REQUIRED filesystem)
+add_definitions(-DBOOST_ERROR_CODE_HEADER_ONLY)
 if(Boost_FOUND)
   message(STATUS "Found Boost version: ${Boost_VERSION}")
   #message(STATUS "Boost directories: ${Boost_INCLUDE_DIRS}")
@@ -88,6 +89,10 @@ if(TENSORRT_ENABLED)
     message(WARNING "NVINFER_LIBRARY not found.")
   endif(NVINFER_LIBRARY)
 
+# Skip TensorRT
+#set(NVINFER_INCLUDE_DIRS "")
+#set(NVINFER_LIBRARY "")
+
   # Find TensorRT onnx parser
   find_path(NVONNXPARSER_INCLUDE_DIRS NvOnnxParser.h
             HINT $ENV{NVONNXPARSER_INCLUDE_DIRS})
@@ -114,6 +119,15 @@ if(TENSORRT_AVAILABLE AND NVONNXPARSER_INCLUDE_DIRS AND NVONNXPARSER_LIBRARY)
   set(TENSORRT_ONNX_PARSER_AVAILABLE TRUE)
 endif()
 
+
+# Find Torch
+set(CMAKE_PREFIX_PATH lib/libtorch)
+find_package(Torch REQUIRED)
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+if(TORCH_INCLUDE_DIRS)
+  message(STATUS "Found TORCH_INCLUDE_DIRS:" ${TORCH_INCLUDE_DIRS})
+endif(TORCH_INCLUDE_DIRS)
+
 # Set preprocessor flag to selectively build with TensorRT
 if(TENSORRT_AVAILABLE)
   message(STATUS "Build with TensorRT.")
@@ -138,6 +152,7 @@ include_directories(
   ${Boost_INCLUDE_DIRS}
   ${CUDA_INCLUDE_DIRS}
   ${NVINFER_INCLUDE_DIRS}
+  ${TORCH_INCLUDE_DIRS}
 )
 
 if(TENSORRT_AVAILABLE)
