@@ -12,3 +12,9 @@ endif(TENSORRT_ONNX_PARSER_AVAILABLE)
 add_executable(network_demo network_demo.cpp)
 target_link_libraries(network_demo crop_detection)
 
+add_library(pytorch_load pytorch_network.cpp)
+target_link_libraries(pytorch_load ${TORCH_LIBRARIES} ${CUDA_LIBRARIES})
+
+add_executable(pytorch_demo pytorch_demo.cpp)
+target_link_libraries(pytorch_demo pytorch_load)
+
