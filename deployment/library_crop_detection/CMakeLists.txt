@@ -90,8 +90,8 @@ if(TENSORRT_ENABLED)
   endif(NVINFER_LIBRARY)
 
 # Skip TensorRT
-#set(NVINFER_INCLUDE_DIRS "")
-#set(NVINFER_LIBRARY "")
+set(NVINFER_INCLUDE_DIRS "")
+set(NVINFER_LIBRARY "")
 
   # Find TensorRT onnx parser
   find_path(NVONNXPARSER_INCLUDE_DIRS NvOnnxParser.h
@@ -121,7 +121,7 @@ endif()
 
 
 # Find Torch
-set(CMAKE_PREFIX_PATH lib/libtorch)
+set(CMAKE_PREFIX_PATH ${LIBTORCH})
 find_package(Torch REQUIRED)
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 if(TORCH_INCLUDE_DIRS)

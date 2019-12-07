@@ -7,6 +7,7 @@
 
 
 #include "network.hpp"
+#include <torch/script.h>
 
 namespace igg {
 
@@ -50,7 +51,7 @@ private:
    * @param kFilepath Path to file with the serialized engine. We usually use '.engine' as suffix.
    */
   //bool LoadSerialized(const std::string& kFilepath);
-
+  torch::jit::script::Module module;
   };
 
 }
