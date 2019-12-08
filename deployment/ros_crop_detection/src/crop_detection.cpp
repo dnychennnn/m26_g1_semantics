@@ -79,9 +79,13 @@ void CropDetection::Callback(const sensor_msgs::ImageConstPtr& kRgbImageMessage,
   //cv::imshow("NIR", nir_image->image);
   //cv::waitKey();
 
+  // BGR to RGB
+  cv::Mat rgb_image;
+  cv::cvtColor(rgb_image_ptr->image, rgb_image, cv::COLOR_BGR2RGB);
+
   // Merge to create four channel image
   std::vector<cv::Mat> channels;
-  cv::split(rgb_image_ptr->image, channels);
+  cv::split(rgb_image, channels);
   channels.emplace_back(nir_image_ptr->image);
   cv::Mat rgb_nir_image;
   cv::merge(channels, rgb_nir_image);
