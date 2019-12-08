@@ -34,4 +34,10 @@
         output="screen"
         args="$(arg path_to_bag_file) --delay=3"/>
   <!-- Start with 3 seconds delay after advertising topics. -->
+
+  <!-- Save output to files (folder .ros in home directory). -->
+  <!--
+  <node name="extract" pkg="image_view" type="extract_images" respawn="false" required="true" output="screen" cwd="ROS_HOME">
+    <remap from="image" to="crop_detection_node/network_output"/>
+  </node>-->
 </launch>
