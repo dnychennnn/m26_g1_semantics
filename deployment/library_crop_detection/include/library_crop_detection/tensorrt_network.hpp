@@ -42,6 +42,8 @@ public:
   /*!
    * Constructor.
    */
+  TensorrtNetwork();
+
   TensorrtNetwork(const NetworkParameters& kParameters);
 
   ~TensorrtNetwork();

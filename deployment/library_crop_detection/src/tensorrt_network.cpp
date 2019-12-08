@@ -29,13 +29,25 @@ namespace igg {
 
 namespace fs = boost::filesystem;
 
+
+TensorrtNetwork::TensorrtNetwork():
+    mean_{0.386, 0.227, 0.054, 0.220}, std_{0.124, 0.072, 0.0108, 0.066} {
+  ASSERT_TENSORRT_AVAILABLE;
+}
+
+
 TensorrtNetwork::TensorrtNetwork(const NetworkParameters& kParameters):
-    mean_{kParameters.mean}, std_{kParameters.std}, kStemInference_{OpencvStemInference({kParameters})} {}
+    mean_{kParameters.mean}, std_{kParameters.std}, kStemInference_{OpencvStemInference({kParameters})} {
+  ASSERT_TENSORRT_AVAILABLE;
+}
 
 
 TensorrtNetwork::~TensorrtNetwork() {
+  ASSERT_TENSORRT_AVAILABLE;
+  #ifdef TENSORRT_AVAILABLE
   if(this->engine_){this->engine_->destroy();}
   this->FreeBufferMemory();
+  #endif // TENSORRT_AVAILABLE
 }
 
 
@@ -146,7 +158,7 @@ void TensorrtNetwork::Load(const std::string& kFilepath, const bool kForceRebuil
 
     std::ifstream model_file(kFilepath, std::ios::binary);
     if (!model_file) {
-      throw std::runtime_error("Cannnot read model file: \""+kFilepath+"\"");
+      throw std::runtime_error("Cannnot read model file: '"+kFilepath+"'");
     }
 
     auto builder = nvinfer1::createInferBuilder(this->logger_);
@@ -156,7 +168,7 @@ void TensorrtNetwork::Load(const std::string& kFilepath, const bool kForceRebuil
     auto parser = nvonnxparser::createParser(*network, this->logger_);
     if(!parser->parseFromFile(kFilepath.c_str(),
          static_cast<int>(this->logger_.getReportableSeverity()))){
-      throw std::runtime_error("Cannnot parse model file: \""+kFilepath+"\"");
+      throw std::runtime_error("Cannnot parse model file: '"+kFilepath+"'");
     }
 
     builder->setMaxBatchSize(1);
@@ -192,20 +204,25 @@ bool TensorrtNetwork::LoadSerialized(const std::string& kFilepath) {
 
   std::ifstream model_file(kFilepath, std::ios::binary);
   if (!model_file) {
-    std::cout << "Cannnot read model engine: \"" << kFilepath << "\"\n";
+    std::cout << "Cannnot read model engine: '" << kFilepath << "'\n";
+    model_file.close();
     return false;
   }
 
-  std::cout << "Load serialized engine: \"" << kFilepath << "\"\n";
+  std::cout << "Load serialized engine: '" << kFilepath << "'\n";
 
   std::stringstream model_stream;
   model_stream.seekg(0, model_stream.beg);
   model_stream << model_file.rdbuf();
   model_file.close();
 
+  //std::cout << "Closed file." << std::endl;
+
   model_stream.seekg(0, std::ios::end);
   const size_t kModelSize = model_stream.tellg();
   model_stream.seekg(0, std::ios::beg);
+
+  //std::cout << "Model size: " << kModelSize << std::endl;
 
   void* model_memory = malloc(kModelSize);
   if (!model_memory) {
@@ -213,13 +230,32 @@ bool TensorrtNetwork::LoadSerialized(const std::string& kFilepath) {
     return false;
   }
 
+  //std::cout << "Allocated." << std::endl;
+
   model_stream.read(reinterpret_cast<char*>(model_memory), kModelSize);
 
-  auto runtime = nvinfer1::createInferRuntime(this->logger_);
-  if(this->engine_){this->engine_->destroy();}
+  //std::cout << "Read." << std::endl;
+
+  if (this->engine_) {this->engine_->destroy();}
+
+  //std::cout << "Create runtime." << std::endl;
+
+  nvinfer1::IRuntime* runtime = nvinfer1::createInferRuntime(this->logger_);
+
+  if (!runtime) {
+    std::cerr << "Could not create runtime." << std::endl;
+    return false;
+  }
+
   this->engine_ = runtime->deserializeCudaEngine(model_memory, kModelSize, nullptr);
 
+  //std::cout << "Serialized." << std::endl;
+
   free(model_memory);
+  runtime->destroy();
+
+  //std::cout << "Freed." << std::endl;
+
   return true;
   #endif // TENSORRT_AVAILABLE
 }
@@ -360,7 +396,7 @@ nvinfer1::ILogger::Severity TensorrtNetworkLogger::getReportableSeverity() {
 
 void TensorrtNetworkLogger::log(nvinfer1::ILogger::Severity severity, const char* kMessage) {
   if (severity != nvinfer1::ILogger::Severity::kINFO) {
-    std::cout << kMessage << "\n";
+    std::cout << "[TENSORRT] " << kMessage << "\n";
   }
 }
 #endif // TENSORRT_AVAILABLE

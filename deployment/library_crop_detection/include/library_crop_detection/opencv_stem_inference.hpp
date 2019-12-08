@@ -28,6 +28,8 @@ class OpencvStemInference {
 public:
   OpencvStemInference(const StemInferenceParameters& kParameters);
 
+  OpencvStemInference();
+
   void Infer(NetworkInference* inference) const;
 
 private:

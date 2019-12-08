@@ -152,8 +152,8 @@ endif(TENSORRT_ONNX_PARSER_AVAILABLE)
 ###################################
 
 catkin_package(
-  INCLUDE_DIRS include
-  LIBRARIES crop_detection
+  INCLUDE_DIRS include/${PROJECT_NAME}
+  LIBRARIES ${PROJECT_NAME}
   CATKIN_DEPENDS
   DEPENDS
 )
@@ -167,8 +167,8 @@ catkin_package(
 
 # Include
 include_directories(
-  ${PROJECT_SOURCE_DIR}/include
-  ${PROJECT_SOURCE_DIR}/src
+  include/${PROJECT_NAME}
+  src
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
   ${Boost_INCLUDE_DIRS}
@@ -188,23 +188,25 @@ endif(TENSORRT_ONNX_PARSER_AVAILABLE)
 
 ## Declare a C++ library
 
-add_library(crop_detection SHARED
+add_library(${PROJECT_NAME}
   src/tensorrt_network.cpp
   src/pytorch_network.cpp
   src/network_inference.cpp
-  src/opencv_stem_inference.cpp)
+  src/opencv_stem_inference.cpp
+)
 
-target_link_libraries(crop_detection
+target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}
   ${OpenCV_LIBS}
-  Boost::filesystem)
+  Boost::filesystem
+)
 
 if(TENSORRT_AVAILABLE)
-  target_link_libraries(crop_detection ${CUDA_LIBRARIES} ${NVINFER_LIBRARY})
+  target_link_libraries(${PROJECT_NAME} ${CUDA_LIBRARIES} ${NVINFER_LIBRARY})
 endif(TENSORRT_AVAILABLE)
 
 if(TENSORRT_ONNX_PARSER_AVAILABLE)
-  target_link_libraries(crop_detection ${NVONNXPARSER_LIBRARY})
+  target_link_libraries(${PROJECT_NAME} ${NVONNXPARSER_LIBRARY})
 endif(TENSORRT_ONNX_PARSER_AVAILABLE)
 
 ## Add cmake target dependencies of the library
@@ -218,7 +220,6 @@ endif(TENSORRT_ONNX_PARSER_AVAILABLE)
 # add_executable(${PROJECT_NAME}_node src/library_crop_detection_node.cpp)
 
 add_executable(${PROJECT_NAME}_network_demo src/network_demo.cpp)
-target_link_libraries(${PROJECT_NAME}_network_demo ${catkin_LIBRARIES} crop_detection)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -231,9 +232,10 @@ set_target_properties(${PROJECT_NAME}_network_demo PROPERTIES OUTPUT_NAME networ
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-# target_link_libraries(${PROJECT_NAME}_node
-#   ${catkin_LIBRARIES}
-# )
+target_link_libraries(${PROJECT_NAME}_network_demo
+  ${catkin_LIBRARIES}
+  ${PROJECT_NAME}
+)
 
 #############
 ## Install ##
@@ -257,18 +259,18 @@ set_target_properties(${PROJECT_NAME}_network_demo PROPERTIES OUTPUT_NAME networ
 
 ## Mark libraries for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_libraries.html
-# install(TARGETS ${PROJECT_NAME}
-#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
-# )
+install(TARGETS ${PROJECT_NAME}
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
+)
 
 ## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-#   FILES_MATCHING PATTERN "*.h"
-#   PATTERN ".svn" EXCLUDE
-# )
+ install(DIRECTORY include/${PROJECT_NAME}/
+   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+   # FILES_MATCHING PATTERN "*.hpp"
+   # PATTERN ".gitignore" EXCLUDE
+ )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES
