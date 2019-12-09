@@ -172,8 +172,8 @@ class SugarBeetDataset(Dataset):
         nir_image = Image.open(self.get_path_to_nir_image(filename)).convert('L')
 
         original_height, original_width = np.array(rgb_image).shape[:2]
-        target_scale_factor_x = self.target_width/original_width
         target_scale_factor_y = self.target_height/original_height
+        target_scale_factor_x = self.target_width/original_width
 
         rgb_image = self.resize_input(rgb_image)
         nir_image = self.resize_input(nir_image)
@@ -194,7 +194,7 @@ class SugarBeetDataset(Dataset):
 
         # scale stem positions to target size
         stem_position_target = [(x*target_scale_factor_x, y*target_scale_factor_y)
-                                 for x,y in stem_positions]
+                                 for x, y in stem_positions]
         stem_position_target = np.array(stem_position_target, dtype=np.float32)
 
         # random transformations
@@ -226,16 +226,20 @@ class SugarBeetDataset(Dataset):
         stem_count_target_tensor = torch.tensor(stem_count_target)
 
         if stem_count_target>0:
+            # pad with zeros so we have all targets in a batch of the same shape (MAX_STEM_COUNT, 2,)
             stem_position_target = np.append(stem_position_target, np.zeros((MAX_STEM_COUNT-stem_count_target, 2,), dtype=np.float32), axis=0)
-            # put position coordinates in y, x to be consistent with what we use in the interference part
-            # TODO use this order right from the beginning
         else:
             stem_position_target = np.zeros((MAX_STEM_COUNT, 2,), dtype=np.float32)
 
-        stem_position_target_tensor = torch.from_numpy(np.stack([stem_position_target[:, 1], stem_position_target[:, 0]], axis=1))
+        stem_position_target_tensor = torch.from_numpy(stem_position_target)
 
-        # TODO provide this as a dict
-        return input_tensor, semantic_target_tensor, stem_keypoint_target_tensor, stem_offset_target_tensor, stem_position_target_tensor, stem_count_target_tensor
+        target = {'semantic': semantic_target_tensor,
+                  'stem_keypoint': stem_keypoint_target_tensor,
+                  'stem_offset': stem_offset_target_tensor,
+                  'stem_position': stem_position_target_tensor,
+                  'stem_count': stem_count_target_tensor}
+
+        return input_tensor, target
 
 
     def _make_semantic_target(self, semantic_label):

@@ -162,19 +162,16 @@ class Trainer:
             # need to change that before we can do stem inference here
             accumulated_confusion_matrix_stem_train = np.zeros((2, 2,), dtype=np.long)
             mean_mean_dev_train = 0
-            for batch_index, batch in enumerate(self.data_loader_train):
+            for batch_index, (input_batch, target_batch) in enumerate(self.data_loader_train):
                 print('Train batch {}/{} in epoch {}/{}.'.format(batch_index, len(self.data_loader_train), epoch_index, self.num_epochs))
 
                 self.model.train()
                 self.optimizer.zero_grad()
 
                 # unpack batch
-                (input_batch,
-                 semantic_target_batch,
-                 stem_keypoint_target_batch,
-                 stem_offset_target_batch,
-                 stem_position_target_batch,
-                 stem_count_target_batch) = batch
+                semantic_target_batch = target_batch['semantic']
+                stem_keypoint_target_batch = target_batch['stem_keypoint']
+                stem_offset_target_batch = target_batch['stem_offset']
 
                 # bring to device
                 input_batch = input_batch.to(self.device)
@@ -291,18 +288,16 @@ class Trainer:
 
         accumulated_confusion_matrix_test = np.zeros((3, 3), np.long)
         accumulated_confusion_matrix_stem_test = np.zeros((2,2), np.long)
-        # REVIEW instead of computing mean of mean per image, accumulate over all images
         accumulated_deviation_test = 0.0
-        for batch_index, batch in enumerate(self.data_loader_test):
+        for batch_index, (input_batch, target_batch) in enumerate(self.data_loader_test):
             self.model.eval()
 
             # unpack batch
-            (input_batch,
-             semantic_target_batch,
-             stem_keypoint_target_batch,
-             stem_offset_target_batch,
-             stem_position_target_batch,
-             stem_count_target_batch) = batch
+            semantic_target_batch = target_batch['semantic']
+            stem_keypoint_target_batch = target_batch['stem_keypoint']
+            stem_offset_target_batch = target_batch['stem_offset']
+            stem_position_target_batch = target_batch['stem_position']
+            stem_count_target_batch = target_batch['stem_count']
 
             input_batch = input_batch.to(self.device)
             semantic_target_batch = semantic_target_batch.to(self.device)
@@ -377,7 +372,7 @@ class Trainer:
         print("  Accuracy 'weed': {:.04f}".format(metrics_test['accuracy'][1]))
         print("  Accuracy 'sugar beet': {:.04f}".format(metrics_test['accuracy'][2]))
         print("  Accuracy stem detection with {:.01f} px tolerance: {:.04f}".format(self.tolerance_radius, metrics_stem_test['accuracy'][0]))
-        print("  Mean deviation stems within {:.01f} px tolerance: {:.04f} px".format(self.tolerance_radius, accumulated_deviation_test/accumulated_confusion_matrix_stem_test[0, 0]))
+        print("  Mean deviation stems within {:.01f} px tolerance: {:.04f} px".format(self.tolerance_radius, accumulated_deviation_test/(accumulated_confusion_matrix_stem_test[0, 0]+1e-6)))
 
 
     def make_plots(self, path, input_slice, semantic_output, stem_keypoint_output, stem_offset_output, stem_position_output, stem_position_target, test_run):
