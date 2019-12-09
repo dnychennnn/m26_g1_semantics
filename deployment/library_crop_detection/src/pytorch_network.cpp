@@ -11,31 +11,42 @@
 #include <iostream>
 #include <memory>
 #include <torch/script.h>
+#include <ATen/ATen.h>
+
+#include <opencv2/core.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 
 
 namespace igg {
 
-PytorchNetwork::PytorchNetwork() {}
+PytorchNetwork::PytorchNetwork() {
+  this->module = new torch::jit::script::Module();
 
+}
+
+namespace fs = boost::filesystem;
 
 NetworkInference PytorchNetwork::Infer(const cv::Mat& kImage) const {
-  std::cout << "Inferece" << std::endl;
+  
+  
+  
   return NetworkInference();
 }
 
 
 bool PytorchNetwork::Load(const std::string kFilepath, const bool kForceRebuild){
 
-  torch::jit::script::Module module;
-    try {
-        // Deserialize the ScriptModule from a file using torch::jit::load().
-        module = torch::jit::load(kFilepath);
-        }
-    catch (const c10::Error& e) {
-        std::cerr << "error loading the model\n";
-        //  std::cerr << e.msg() << std::endl;
-        return false;
-        }
+  try {
+      // Deserialize the ScriptModule from a file using torch::jit::load().
+      *this->module = torch::jit::load(kFilepath);
+      }
+  catch (const c10::Error& e) {
+      std::cerr << "error loading the model\n";
+      //  std::cerr << e.msg() << std::endl;
+      return false;
+      }
   std::cout << "ok\n";
   return true;
 
