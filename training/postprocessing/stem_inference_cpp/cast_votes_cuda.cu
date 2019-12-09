@@ -45,6 +45,7 @@ __global__ void CastKernel(const long* kVotesXs,
       || kVotesWeights[kIndex]<kThreshold) {return;}
 
   const int kVoteIndex = kBatchIndex*kHeight*kWidth+kVotesYs[kIndex]*kWidth+kVotesXs[kIndex];
+
   votes[kVoteIndex] += kVotesWeights[kIndex];
 }
 
@@ -79,7 +80,7 @@ at::Tensor CastVotesCuda(torch::Tensor kVotesXs,
   auto votes = torch::zeros_like(kVotesWeights);
 
   const int kNumThreads = 1024;
-  // use a 2D grid of blocks, batch_index along y axis
+  // use a 2D grid of blocks, slice index along y axis
   const dim3 kNumBlocks((kSize+kNumThreads-1)/kNumThreads, kBatchSize);
 
   CastKernel<<<kNumBlocks, kNumThreads>>>(kVotesXs.data<long>(), kVotesYs.data<long>(),

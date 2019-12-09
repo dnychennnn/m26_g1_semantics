@@ -96,15 +96,11 @@ class StemInference(nn.Module):
               warnings.warn("Stem inference device option '{}' not recognized. Using option 'pytorch'.")
           votes = self.cast_votes_pytorch(votes_xs, votes_ys, votes_weights)
 
-        print(votes.dtype)
-
         # normalize by size of keypoint disk
         votes /= np.pi*self.keypoint_radius*self.keypoint_radius
 
         votes = self.box_filter(votes[:, None])
         votes_dilated = self.max_filter(votes)
-
-        print(torch.max(votes))
 
         peaks = torch.isclose(votes, votes_dilated)&(votes>self.threshold_peaks)
         peaks = peaks[:, 0]
@@ -135,7 +131,7 @@ class StemInference(nn.Module):
         votes_ys = torch.clamp(votes_ys, 0, self.input_height-1)
 
         # let only pixels above threshold vote
-        votes_weights[votes_weights < self.threshold_votes] = 0.0
+        votes_weights[votes_weights<self.threshold_votes] = 0.0
 
         # initialize accumulated votes with zeros
         votes = torch.zeros((batch_size, self.input_height, self.input_width,), dtype=torch.float32, device=device)
@@ -145,7 +141,7 @@ class StemInference(nn.Module):
             slice_index, dtype=torch.long, device=device) for slice_index in range(batch_size)], dim=0)
 
         # accumulate votes
-        votes = votes.index_put((votes_slices_indices, votes_ys, votes_xs), votes_weights, accumulate=True)
+        votes.index_put_((votes_slices_indices, votes_ys, votes_xs), votes_weights, accumulate=True)
 
         return votes
 
