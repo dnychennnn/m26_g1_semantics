@@ -55,6 +55,11 @@ public:
   cv::Mat InputImageAsFalseColorRgb();
   cv::Mat InputImageAsFalseColorBgr();
 
+  /*!
+   * Helpers to get output as usigned 8 bit integer.
+   */
+  cv::Mat SemanticClassConfidenceAsUint8(const int kClassIndex);
+
   /*
    * Helpers for plotting.
    */

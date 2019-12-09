@@ -18,6 +18,7 @@
 #include <message_filters/time_synchronizer.h>
 
 #include <library_crop_detection/network.hpp>
+#include <library_crop_detection/tensorrt_network.hpp>
 
 namespace igg {
 
@@ -55,10 +56,18 @@ private:
   message_filters::TimeSynchronizer <sensor_msgs::Image, sensor_msgs::Image> time_synchronizer_;
 
   //! Publisher for network outputs.
-  image_transport::Publisher network_output_publisher_;
+  image_transport::Publisher network_input_image_publisher_;
+  image_transport::Publisher network_background_confidence_publisher_;
+  image_transport::Publisher network_weed_confidence_publisher_;
+  image_transport::Publisher network_sugar_beet_confidence_publisher_;
+  image_transport::Publisher network_semantic_class_labels_publisher_;
+  image_transport::Publisher network_visualization_publisher_;
+
+  ros::Publisher stem_inference_publisher_;
 
   //! Network.
-  std::unique_ptr<igg::Network> network_;
+  // std::unique_ptr<igg::Network> network_ = nullptr;
+  igg::TensorrtNetwork network_ = igg::TensorrtNetwork(NetworkParameters());
 };
 
 } // namespace igg

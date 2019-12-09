@@ -13,11 +13,10 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 ## Find catkin macros and libraries
 find_package(catkin REQUIRED COMPONENTS
   roscpp
-  sensor_msgs
   std_msgs
-  std_srvs
+  geometry_msgs
+  sensor_msgs
   message_generation
-  message_runtime
   cv_bridge
   image_transport
   message_filters
@@ -68,11 +67,10 @@ endif(Boost_FOUND)
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+add_message_files(
+  FILES
+  StemInference.msg
+)
 
 ## Generate services in the 'srv' folder
 #add_service_files(
@@ -87,10 +85,12 @@ endif(Boost_FOUND)
 # )
 
 ## Generate added messages and services with any dependencies listed here
-#generate_messages(
-  #DEPENDENCIES
-  #std_msgs
-#)
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+  geometry_msgs
+  sensor_msgs
+)
 
 ###################################
 ## catkin specific configuration ##
@@ -108,8 +108,10 @@ catkin_package(
   LIBRARIES
     ${PROJECT_NAME}
   CATKIN_DEPENDS
-    sensor_msgs
     std_msgs
+    geometry_msgs
+    sensor_msgs
+    message_runtime
     cv_bridge
     image_transport
     library_crop_detection
