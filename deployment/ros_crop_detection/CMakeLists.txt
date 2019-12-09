@@ -10,7 +10,6 @@ set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 #set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
-
 ## Find catkin macros and libraries
 find_package(catkin REQUIRED COMPONENTS
   roscpp
@@ -22,6 +21,7 @@ find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   image_transport
   message_filters
+  library_crop_detection
 )
 
 ## Find OpenCV
@@ -34,7 +34,7 @@ else()
   message(FATAL_ERROR "OpenCV not found.")
 endif(OpenCV_FOUND)
 
-# Find Boost
+## Find Boost
 find_package(Boost REQUIRED filesystem)
 if(Boost_FOUND)
   message(STATUS "Found Boost version: ${Boost_VERSION}")
@@ -42,14 +42,6 @@ if(Boost_FOUND)
 else()
   message(FATAL_ERROR "Boost not found, please refer to README.md.")
 endif(Boost_FOUND)
-
-## Find Eigen3
-#find_package(Eigen3 REQUIRED)
-#if(Eigen3_FOUND)
-  #message(STATUS "Found Eigen3 version: ${Eigen3_VERSION}")
-#else()
-  #message(FATAL_ERROR "Eigen3 not found.")
-#endif(Eigen3_FOUND)
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -114,12 +106,13 @@ catkin_package(
   INCLUDE_DIRS
     include
   LIBRARIES
-    ${PROJECT_NAME}_core
+    ${PROJECT_NAME}
   CATKIN_DEPENDS
     sensor_msgs
     std_msgs
     cv_bridge
     image_transport
+    library_crop_detection
 #  DEPENDS
 )
 
@@ -130,7 +123,7 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-  include
+  include/${PROJECT_NAME}
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
   ${Boost_INCLUDE_DIRS}
@@ -142,8 +135,9 @@ include_directories(
 #)
 
 ## Declare cpp executables
-add_executable(tester_node
+add_executable(crop_detection_node
   src/crop_detection_node.cpp
+  src/crop_detection.cpp
 )
 
 ## Specify libraries to link executable targets against
@@ -152,7 +146,7 @@ add_executable(tester_node
   #${OpenCV_LIBS}
 #)
 
-target_link_libraries(tester_node
+target_link_libraries(crop_detection_node
   ${catkin_LIBRARIES}
   ${OpenCV_LIBS}
   Boost::filesystem

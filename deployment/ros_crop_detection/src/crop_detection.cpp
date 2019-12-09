@@ -15,29 +15,52 @@
 #include <boost/bind.hpp>
 #include <opencv2/opencv.hpp>
 
+#include <library_crop_detection/tensorrt_network.hpp>
+#include <library_crop_detection/tensorrt_common.hpp>
+
 namespace igg {
 
 namespace fs = boost::filesystem;
 
 CropDetection::CropDetection(ros::NodeHandle& node_handle,
-                               const std::string& kRgbImageTopic,
-                               const std::string& kNirImageTopic):
+                             const std::string& kRgbImageTopic,
+                             const std::string& kNirImageTopic,
+                             const std::string& kPathToModelFile):
       node_handle_{node_handle},
-      kRgbImageTopic_{kRgbImageTopic},
-      kNirImageTopic_{kNirImageTopic},
-      rgb_image_subscriber_{this->node_handle_, this->kRgbImageTopic_, 1},
-      nir_image_subscriber_{this->node_handle_, this->kNirImageTopic_, 1},
-      time_synchronizer_{this->rgb_image_subscriber_, this->nir_image_subscriber_, 10},
-      network_{TensorrtNetwork(NetworkPrameters())} {
+      rgb_image_subscriber_{this->node_handle_, kRgbImageTopic, 1},
+      nir_image_subscriber_{this->node_handle_, kNirImageTopic, 1},
+      time_synchronizer_{this->rgb_image_subscriber_, this->nir_image_subscriber_, 10} {
+
+  ROS_INFO("Init crop detection node.");
+
+  // Register callback
   this->time_synchronizer_.registerCallback(boost::bind(&CropDetection::Callback, this, _1, _2));
-  ROS_INFO("Launched crop detection node.");
+
+  // Advertise network ouput topic
+  image_transport::ImageTransport transport(this->node_handle_);
+  this->network_output_publisher_ = transport.advertise("network_output", 1);
+
+  try {
+    ROS_INFO("Init network.");
+    this->network_ = std::make_unique<TensorrtNetwork>(NetworkParameters());
+    this->network_->Load(kPathToModelFile+".onnx", false); // false as we do not enforce rebuilding the model
+    // TODO sometimes results in a runtime error: 'free(): invalid pointer'
+  } catch (const TensorrtNotAvailableException& kError) {
+    // TODO Attempt to load pytorch model.
+    ROS_ERROR("Cannot initialize TensorRT network because this is a build without TensorRT. "
+              "Shutdown.");
+    ros::requestShutdown();
+  }
 }
 
-ImageExtractor::~ImageExtractor() {}
-
 void CropDetection::Callback(const sensor_msgs::ImageConstPtr& kRgbImageMessage,
-                              const sensor_msgs::ImageConstPtr& kNirImageMessage) {
-  //ROS_INFO("Image extractor callback.");
+                             const sensor_msgs::ImageConstPtr& kNirImageMessage) {
+  ROS_INFO("Crop detection callback.");
+
+  if (!this->network_->IsReadyToInfer()) {
+    ROS_WARN("Received image, but network is not loaded.");
+    return;
+  }
 
   // Get images as OpenCV matrices
   cv_bridge::CvImagePtr rgb_image_ptr;
@@ -56,42 +79,33 @@ void CropDetection::Callback(const sensor_msgs::ImageConstPtr& kRgbImageMessage,
   //cv::imshow("NIR", nir_image->image);
   //cv::waitKey();
 
+  // BGR to RGB
+  cv::Mat rgb_image;
+  cv::cvtColor(rgb_image_ptr->image, rgb_image, cv::COLOR_BGR2RGB);
+
   // Merge to create four channel image
   std::vector<cv::Mat> channels;
-  cv::split(rgb_image_ptr->image, channels);
+  cv::split(rgb_image, channels);
   channels.emplace_back(nir_image_ptr->image);
   cv::Mat rgb_nir_image;
   cv::merge(channels, rgb_nir_image);
 
-  // Put images into folder with the same name as the bagfile
-  const fs::path kOutputFolder = this->kOutputPath_/this->kBagfilePath_.stem();
-  if (!fs::exists(kOutputFolder) &&
-      !fs::create_directory(kOutputFolder)) {
-    ROS_ERROR("Error creating output folder.");
-    return;
-  }
+  igg::NetworkInference result;
+  this->network_->Infer(&result, rgb_nir_image, false);
 
-  // Construct filenames from name of bagfile and current index padded with zeros
-  std::stringstream filename_stream;
-  filename_stream << this->kBagfilePath_.stem().string();
-  filename_stream << "_" << std::setw(10) << std::setfill('0') << this->image_count_;
-  std::string filename_base = filename_stream.str();
-  const fs::path kRgbOutputPath = kOutputFolder/(filename_base+"_RGB.png");
-  const fs::path kNirOutputPath = kOutputFolder/(filename_base+"_NIR.png");
-  const fs::path kRgbNirOutputPath = kOutputFolder/(filename_base+"_RGBNIR.png");
+  // Put output image into message
+  sensor_msgs::ImagePtr message = cv_bridge::CvImage(
+      std_msgs::Header(), "bgr8", result.MakePlot()).toImageMsg();
 
-  // Write images
-  ROS_INFO("Writing RGB image to %s.", kRgbOutputPath.filename().string().c_str());
-  cv::imwrite(kRgbOutputPath.string(), rgb_image_ptr->image);
+  this->network_output_publisher_.publish(message);
 
-  ROS_INFO("Writing NIR image to %s.", kNirOutputPath.filename().string().c_str());
-  cv::imwrite(kNirOutputPath.string(), nir_image_ptr->image);
-
-  ROS_INFO("Writing RGBNIR image to %s.", kRgbNirOutputPath.filename().string().c_str());
-  cv::imwrite(kRgbNirOutputPath.string(), rgb_nir_image);
-
-  // Keep track of number of images extracted so far
-  this->image_count_++;
+  //cv::imshow("input_image", result.InputImageAsFalseColorBgr());
+  //cv::imshow("background_confidence", result.SemanticClassConfidence(0));
+  //cv::imshow("weed_confidence", result.SemanticClassConfidence(1));
+  //cv::imshow("sugar_beet_confidence", result.SemanticClassConfidence(2));
+  //cv::imshow("stem_keypoint_confidence", result.StemKeypointConfidence());
+  //cv::imshow("all", result.MakePlot());
+  //cv::waitKey(1);
 }
 
 } // namespace igg

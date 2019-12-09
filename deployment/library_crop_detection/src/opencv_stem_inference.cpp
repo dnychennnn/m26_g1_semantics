@@ -26,6 +26,14 @@ OpencvStemInference::OpencvStemInference(const StemInferenceParameters& kParamet
     kThresholdPeaks_{kParameters.threshold_peaks} {}
 
 
+OpencvStemInference::OpencvStemInference():
+    kKeypointRadius_{15.0},
+    kKernelSizeVotes_{5},
+    kKernelSizePeaks_{9},
+    kThresholdVotes_{0.005},
+    kThresholdPeaks_{0.5} {}
+
+
 void OpencvStemInference::Infer(NetworkInference* inference) const {
   cv::Mat stem_keypoint_confidence = inference->StemKeypointConfidence();
   if(stem_keypoint_confidence.empty()) {

@@ -1,0 +1,43 @@
+<launch>
+  <!-- Load parameters from config file. -->
+  <rosparam command="load" file="$(find ros_crop_detection)/config/demo.yaml" />
+
+  <!-- Image topics to extract. -->
+  <arg name="rgb_image_topic"
+    default="/stereo_rgb/left/image_raw_sync" />
+
+  <arg name="nir_image_topic"
+    default="/stereo_nir/left/image_raw_sync" />
+
+  <!-- The model to use. Will look for a .onnx/.engine/.pt file with the same name. -->
+  <arg name="path_to_model_file"
+    default="$(env M26_G1_SEMANTICS_MODELS_DIR)simple_unet" />
+
+  <!-- The bag file to play back. -->
+  <arg name="path_to_bag_file"
+    default="$(env M26_G1_SEMANTICS_BAGS_DIR)/flourish-rng_2015-06-29-14-43-43_1.bag" />
+
+  <!-- Bring up crop detection node. -->
+  <node pkg="ros_crop_detection"
+        type="crop_detection_node"
+        name="crop_detection_node"
+        output="screen">
+    <param name="rgb_image_topic" type="string" value="$(arg rgb_image_topic)" />
+    <param name="nir_image_topic" type="string" value="$(arg nir_image_topic)" />
+    <param name="path_to_model_file" type="string" value="$(arg path_to_model_file)" />
+  </node>
+
+  <!-- Play back the data. -->
+  <node pkg="rosbag"
+        type="play"
+        name="rosbag_play_node"
+        output="screen"
+        args="$(arg path_to_bag_file) --delay=3"/>
+  <!-- Start with 3 seconds delay after advertising topics. -->
+
+  <!-- Save output to files (folder .ros in home directory). -->
+  <!--
+  <node name="extract" pkg="image_view" type="extract_images" respawn="false" required="true" output="screen" cwd="ROS_HOME">
+    <remap from="image" to="crop_detection_node/network_output"/>
+  </node>-->
+</launch>

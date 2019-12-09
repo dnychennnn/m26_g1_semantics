@@ -185,6 +185,11 @@ cv::Mat NetworkInference::MakePlot() {
   }
 
   plot += 0.5*markers;
+
+  // To 8 bit unsigned integer
+  plot *= 255.0;
+  plot.convertTo(plot, CV_8UC3);
+
   return plot;
 }
 

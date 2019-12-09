@@ -2,13 +2,17 @@
 <package format="2">
   <name>library_crop_detection</name>
   <version>0.1.0</version>
-  <description>Crop detection inside ROS.</description>
-  <maintainer email="s6ynchenk@uni-bonn.de">Yun-Yu Chen</maintainer>
+  <description>Inference of plant stem position and semantic mask using a trained neural network.</description>
+
+  <maintainer email="s6ynchen@uni-bonn.de">Yung-Yu Chen</maintainer>
   <maintainer email="s7jaquak@uni-bonn.de">Jan Quakernack</maintainer>
-  <license>TODO</license>
-  <author email="s6ynchenk@uni-bonn.de">Yun-Yu Chen</author>
+
+  <author email="s6ynchen@uni-bonn.de">Yung-Yu Chen</author>
   <author email="s7jaquak@uni-bonn.de">Jan Quakernack</author>
 
+  <license>TODO</license>
+
   <buildtool_depend>catkin</buildtool_depend>
+  <depend>opencv</depend>
 
 </package>

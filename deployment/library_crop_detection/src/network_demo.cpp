@@ -9,12 +9,12 @@
 #include "tensorrt_network.hpp"
 
 int main() {
-  // get some test image
-  cv::Mat input_rgb = cv::imread("../test_data/test_rgb.png", cv::IMREAD_UNCHANGED);
-  //cv::imshow("input_rgb", input_rgb);
+   //get some test image
+  cv::Mat input_rgb = cv::imread("test_data/test_rgb.png", cv::IMREAD_UNCHANGED);
+  cv::imshow("input_rgb", input_rgb);
   cv::cvtColor(input_rgb, input_rgb, cv::COLOR_BGR2RGB);
-  cv::Mat input_nir = cv::imread("../test_data/test_nir.png", cv::IMREAD_UNCHANGED);
-  //cv::imshow("input_nir", input_nir);
+  cv::Mat input_nir = cv::imread("test_data/test_nir.png", cv::IMREAD_UNCHANGED);
+  cv::imshow("input_nir", input_nir);
 
   // merge to 4 channels
   std::vector<cv::Mat> channels;
