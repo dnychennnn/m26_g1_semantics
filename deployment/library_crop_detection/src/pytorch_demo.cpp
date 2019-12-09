@@ -18,8 +18,17 @@ cv::imshow("input_rgb", input_rgb);
 cv::cvtColor(input_rgb, input_rgb, cv::COLOR_BGR2RGB);
 cv::Mat input_nir = cv::imread("../test_data/test_nir.png", cv::IMREAD_UNCHANGED);
 cv::imshow("input_nir", input_nir);
-cv::waitKey(0);
+
+// merge to 4 channels
+std::vector<cv::Mat> channels;
+cv::split(input_rgb, channels);
+channels.emplace_back(input_nir);
+cv::Mat input;
+cv::merge(channels, input);
+
+//cv::waitKey(0);
+
 network.Load("../model.pt", false);
 
-
+network.Infer(input);
 }
