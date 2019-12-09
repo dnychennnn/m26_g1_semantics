@@ -7,10 +7,10 @@
  * @version 0.1
  */
 #include <string>
+#include <exception>
 #include <stdexcept>
 
 #include <torch/extension.h>
-
 
 # define CHECK_DIM(tensor, dim) igg::CheckDim(tensor, dim, #tensor);
 # define CHECK_SIZE(tensor, dim, size) igg::CheckSize(tensor, dim, size, #tensor);

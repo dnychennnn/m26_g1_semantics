@@ -11,13 +11,24 @@
 
 #include "common.hpp"
 
+#define HANDLE_ERROR(error)(igg::handle_cuda_error(error, __FILE__, __LINE__ ))
 
 namespace igg {
 
-__global__ void CastKernel(const long* __restrict__ kVotesXs,
-                           const long* __restrict__ kVotesYs,
-                           const float* __restrict__ kVotesWeights,
-                           float* __restrict__ votes,
+// Handling of CUDA errors.
+// Reference: Jason Sander and Edward Kandrot, CUDA by Example. Retrieved from https://developer.nvidia.com/cuda-example.
+// Adjusted to meet our code format.
+static void handle_cuda_error(const cudaError_t kError, const char* kFile, const int kLine) {
+  if (kError!=cudaSuccess) {
+    throw std::runtime_error(std::string(cudaGetErrorString(kError))+" in "+kFile+" at line "+std::to_string(kLine)+".");
+  }
+}
+
+
+__global__ void CastKernel(const long* kVotesXs,
+                           const long* kVotesYs,
+                           const float* kVotesWeights,
+                           float* votes,
                            const int kBatchSize, const int kHeight, const int kWidth,
                            const float kThreshold) {
   const int kBatchIndex = blockIdx.y;
@@ -34,6 +45,7 @@ __global__ void CastKernel(const long* __restrict__ kVotesXs,
       || kVotesWeights[kIndex]<kThreshold) {return;}
 
   const int kVoteIndex = kBatchIndex*kHeight*kWidth+kVotesYs[kIndex]*kWidth+kVotesXs[kIndex];
+
   votes[kVoteIndex] += kVotesWeights[kIndex];
 }
 
@@ -68,11 +80,13 @@ at::Tensor CastVotesCuda(torch::Tensor kVotesXs,
   auto votes = torch::zeros_like(kVotesWeights);
 
   const int kNumThreads = 1024;
-  // use a 2D grid of blocks, batch_index along y axis
+  // use a 2D grid of blocks, slice index along y axis
   const dim3 kNumBlocks((kSize+kNumThreads-1)/kNumThreads, kBatchSize);
 
   CastKernel<<<kNumBlocks, kNumThreads>>>(kVotesXs.data<long>(), kVotesYs.data<long>(),
       kVotesWeights.data<float>(), votes.data<float>(), kBatchSize, kHeight, kWidth, kThreshold);
+
+  HANDLE_ERROR(cudaDeviceSynchronize());
 
   return votes;
 }
