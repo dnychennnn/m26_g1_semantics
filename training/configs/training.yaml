@@ -28,8 +28,6 @@ weight_sugar_beet: 0.15
 weight_stem_background: 0.1
 weight_stem: 0.9
 
-size_test_set: 50
-
 architecture_name: 'simple_unet' # 'fcn', 'simple_unet'
 path_to_weights_file: 'simple_unet.pth'
 
