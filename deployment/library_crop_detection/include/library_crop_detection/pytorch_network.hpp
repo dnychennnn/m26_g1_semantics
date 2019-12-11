@@ -6,8 +6,10 @@
  */
 
 
-#include "network.hpp"
 #include <torch/script.h>
+#include "network.hpp"
+#include "opencv_stem_inference.hpp"
+
 
 namespace igg {
 
@@ -18,11 +20,15 @@ public:
 
 PytorchNetwork();
 
+PytorchNetwork(const NetworkParameters& kParameters);
 
-/*!
+// ~PytorchNetwork();
+
+
+ /*!
    * See igg::Network::Infer.
    */
-  NetworkInference Infer(const cv::Mat& kImage) const override;
+  void Infer(NetworkInference* result, const cv::Mat& kImage, const bool kMinimalInference) override;
 
   /*!
    * See igg::Network::IsReadyToInfer.
@@ -34,15 +40,14 @@ PytorchNetwork();
    *
    * See igg::Network::Load.
    */
-  bool Load(const std::string kFilepath, const bool kForceRebuild) override;
+  void Load(const std::string& kFilepath, const bool kForceRebuild) override;
 
   /*!
    * See igg::Network.
    */
-  //int InputWidth() const override;
-  //int InputHeight() const override;
-  //int InputChannels() const override;
-
+  int InputWidth() const override;
+  int InputHeight() const override;
+  int InputChannels() const override;
 
 private:
  /*!
@@ -52,6 +57,18 @@ private:
    */
   //bool LoadSerialized(const std::string& kFilepath);
   torch::jit::script::Module* module = nullptr;
+
+  int input_width_ = -1;
+  int input_height_ = -1;
+  int input_channels_ = -1;
+
+
+
+  std::vector<float> mean_;
+  std::vector<float> std_;
+
+  const OpencvStemInference kStemInference_;
+
   };
 
 }

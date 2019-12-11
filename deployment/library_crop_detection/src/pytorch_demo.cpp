@@ -1,16 +1,18 @@
+#include "pytorch_network.hpp"
 #include <iostream>
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
-#include "pytorch_network.hpp"
 
 
 int main(){
 
+const igg::NetworkParameters kParameters;
 
-igg::PytorchNetwork network;
+// igg::PytorchNetwork network(kParameters);
+
 
 // get some test image
 cv::Mat input_rgb = cv::imread("../test_data/test_rgb.png", cv::IMREAD_UNCHANGED);
@@ -26,9 +28,12 @@ channels.emplace_back(input_nir);
 cv::Mat input;
 cv::merge(channels, input);
 
-//cv::waitKey(0);
+cv::waitKey(0);
 
-network.Load("../model.pt", false);
+igg::NetworkInference result;
 
-network.Infer(input);
+const auto model_path = igg::Network::ModelsDir()/"simple_unet.pt";
+std::cout << "Load Model: " <<model_path.string() << std::endl;
+network.Load(model_path.string(), false);
+network.Infer(&result, input, false);
 }
