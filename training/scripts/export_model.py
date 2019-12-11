@@ -56,6 +56,7 @@ def export_model(architecture_name, path_to_weights_file, path_to_output_file, d
                           output_names=['semantic_output', 'stem_keypoint_output', 'stem_offset_output'],
                           verbose=False)
     elif file_type=='pt':
+        model.eval()
         traced_script_module = torch.jit.trace(model, dummy_input)
         traced_script_module.save(str(path_to_output_file))
 
