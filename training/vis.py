@@ -191,12 +191,12 @@ def make_plot_from_stem_output(input_rgb, input_nir, stem_position_output, stem_
     # draw a marker at each stem positions
     if stem_position_target is not None:
         for position in stem_position_target:
-            x, y = position[1], position[0]
+            x, y = position[0], position[1]
             draw_marker(x, y, (0.75, 0.0, 0.0), 2)
 
     if stem_position_output is not None:
         for position in stem_position_output:
-            x, y = position[1], position[0]
+            x, y = position[0], position[1]
             draw_marker(x, y, (0.5, 0.5, 0.5), 1)
 
     plot = plot+1.0*markers

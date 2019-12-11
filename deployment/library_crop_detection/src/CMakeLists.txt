@@ -1,4 +1,4 @@
-add_library(crop_detection SHARED tensorrt_network.cpp pytorch_network.cpp)
+add_library(crop_detection SHARED tensorrt_network.cpp pytorch_network.cpp network_inference.cpp opencv_stem_inference.cpp)
 target_link_libraries(crop_detection ${OpenCV_LIBS} Boost::filesystem)
 
 if(TENSORRT_AVAILABLE)

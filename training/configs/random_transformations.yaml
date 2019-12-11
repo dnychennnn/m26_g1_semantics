@@ -1,0 +1,24 @@
+rotate: True
+flip_x: True
+flip_y: True
+
+scale_min: 0.8
+scale_max: 1.2
+
+shear_min: -0.1
+shear_max: 0.1
+
+translation_min: -100.0
+translation_max: 100.0
+
+brightness_min: -0.1
+brightness_max: 0.1
+
+saturation_min: -0.1
+saturation_max: 0.1
+
+contrast_min: 0.1
+contrast_max: -0.1
+
+blur_min: 0.5
+blur_max: 1.0

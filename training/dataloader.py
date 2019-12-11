@@ -22,11 +22,15 @@ MAX_STEM_COUNT = 128
 class SugarBeetDataset(Dataset):
     """
     Usage:
-        dataset = SugarBeetDataset.from_config()
+        dataset = SugarBeetDataset.from_config('train') # or 'val', 'test'
+
+    Note: Parts adapted from code originally written for MGE-MSR-P-S.
     """
 
     @classmethod
-    def from_config(cls):
+    def from_config(cls, split):
+        assert split in ['train', 'val', 'test']
+
         training_config = load_config('training.yaml')
         dataset_config = load_config('sugar_beet_dataset.yaml')
 
@@ -36,6 +40,18 @@ class SugarBeetDataset(Dataset):
         dataset_parameters['target_height'] = training_config['target_height']
         dataset_parameters['target_width'] = training_config['target_width']
         dataset_parameters['keypoint_radius'] = training_config['keypoint_radius']
+
+        del dataset_parameters['train']
+        del dataset_parameters['val']
+        del dataset_parameters['test']
+
+        # only use files of the given split as specified in config
+        # we have 100 in 'val', 100 in 'test' and the rest in 'train'
+        dataset_parameters['filenames_filter'] = dataset_config[split]
+
+        # data augmentation for train split
+        dataset_parameters['random_transformations'] = (RandomTransformations.from_config('train')
+                                                        if split=='train' else None)
 
         return SugarBeetDataset(**dataset_parameters)
 
@@ -48,7 +64,8 @@ class SugarBeetDataset(Dataset):
                  path_to_rgb_images, suffix_rgb_images,
                  path_to_nir_images, suffix_nir_images,
                  path_to_semantic_labels, suffix_semantic_labels,
-                 path_to_yaml_annotations, suffix_yaml_annotations):
+                 path_to_yaml_annotations, suffix_yaml_annotations,
+                 random_transformations, seed, filenames_filter):
         """Constructor.
 
         Args:
@@ -79,6 +96,13 @@ class SugarBeetDataset(Dataset):
         self.path_to_yaml_annotations = SugarBeetDataset._assure_is_absolute_data_path(Path(path_to_yaml_annotations))
         self.suffix_yaml_annotations = suffix_yaml_annotations
 
+        self.random_transformations = random_transformations
+
+        if self.random_transformations is not None:
+            self.random = np.random.RandomState(seed)
+
+        self.filenames_filter = filenames_filter
+
         # transformations
         self.input_height = input_height
         self.input_width = input_width
@@ -101,8 +125,6 @@ class SugarBeetDataset(Dataset):
         self.rgb_normalization = transforms.Normalize(mean=mean_rgb, std=std_rgb, inplace=True)
         self.nir_normalization = transforms.Normalize(mean=(mean_nir,), std=(std_nir,), inplace=True)
 
-        # TODO random transformations for data augmentation
-
         self.pil_to_tensor = transforms.ToTensor()
 
         # get filenames without suffix of all items in dataset, sort them
@@ -120,6 +142,9 @@ class SugarBeetDataset(Dataset):
         """Get filenames without suffix of all items in dataset for which we
         have all four files (RGB image, NIR image, semantic label and
         stem label).
+
+        Also only use those item that are in self.filenames_filter, which we use
+        to define our split in train, val and test set.
         """
         # get all filenames of RGB images without suffix
         filenames = [path.name.replace(self.suffix_rgb_images, '')
@@ -130,8 +155,8 @@ class SugarBeetDataset(Dataset):
         filenames = [name for name in filenames
                      if (self.get_path_to_nir_image(name).exists()
                          and self.get_path_to_semantic_label(name).exists()
-                         and self.get_path_to_yaml_annotations(name).exists())]
-
+                         and self.get_path_to_yaml_annotations(name).exists()
+                         and name in self.filenames_filter)]
         return filenames
 
 
@@ -168,20 +193,18 @@ class SugarBeetDataset(Dataset):
         filename = self.filenames[index]
 
         # load images and labels
-        rgb_image = Image.open(self.get_path_to_rgb_image(filename)).convert('RGB')
-        nir_image = Image.open(self.get_path_to_nir_image(filename)).convert('L')
+        rgb_image = cv2.imread(str(self.get_path_to_rgb_image(filename)), cv2.IMREAD_UNCHANGED)[..., ::-1] # BGR to RGB
+        nir_image = cv2.imread(str(self.get_path_to_nir_image(filename)), cv2.IMREAD_UNCHANGED)
 
         original_height, original_width = np.array(rgb_image).shape[:2]
-        target_scale_factor_x = self.target_width/original_width
         target_scale_factor_y = self.target_height/original_height
+        target_scale_factor_x = self.target_width/original_width
 
-        rgb_image = self.resize_input(rgb_image)
-        nir_image = self.resize_input(nir_image)
+        rgb_image = cv2.resize(rgb_image, (self.input_width, self.input_height), cv2.INTER_LINEAR)
+        nir_image = cv2.resize(nir_image, (self.input_width, self.input_height), cv2.INTER_LINEAR)
 
-        # no conversion to RGB here
-        semantic_label = Image.open(self.get_path_to_semantic_label(filename))
-        semantic_label = self.resize_target(semantic_label)
-        semantic_label = np.asarray(semantic_label).astype(np.int)
+        semantic_label = cv2.imread(str(self.get_path_to_semantic_label(filename)), cv2.IMREAD_UNCHANGED)
+        semantic_label = cv2.resize(semantic_label, (self.input_width, self.input_height), cv2.INTER_NEAREST)
 
         # make semantic target
         semantic_target = self._make_semantic_target(semantic_label)
@@ -194,11 +217,47 @@ class SugarBeetDataset(Dataset):
 
         # scale stem positions to target size
         stem_position_target = [(x*target_scale_factor_x, y*target_scale_factor_y)
-                                 for x,y in stem_positions]
+                                 for x, y in stem_positions]
         stem_position_target = np.array(stem_position_target, dtype=np.float32)
 
-        # random transformations
-        # TODO keep in mind that we need to be able to transform stem positions (x, y) in the same way
+        if self.random_transformations is not None:
+            # random transformations for data augmentation
+
+            # sample new set of transformation parameters
+            self.random_transformations.sample_transformation(self.random.randint(low=0, high=2**32 - 1))
+
+            # transfrom image
+            rgb_image = np.array(rgb_image)
+            nir_image = np.array(nir_image)
+
+            # pad with zeros
+            rgb_image_padded = self._pad_with_zeros(rgb_image)
+            nir_image_padded = self._pad_with_zeros(nir_image)
+            semantic_target_padded = self._pad_with_zeros(semantic_target)
+
+            rgb_image = self.random_transformations.apply_geometric_transformation_to_image(rgb_image_padded, interpolation=cv2.INTER_LINEAR)
+            nir_image = self.random_transformations.apply_geometric_transformation_to_image(nir_image_padded, interpolation=cv2.INTER_LINEAR)
+            semantic_target = self.random_transformations.apply_geometric_transformation_to_image(semantic_target_padded, interpolation=cv2.INTER_NEAREST)
+
+            rgb_image = self.random_transformations.apply_color_transformation_to_image(rgb_image)
+            nir_image = self.random_transformations.apply_color_transformation_to_image(nir_image)
+
+
+            if stem_position_target.shape[0]>0:
+                # transform stem positions
+
+                # shift positions by padding applied to images
+                offset_x = (self.random_transformations.crop_size-self.input_width)//2
+                offset_y = (self.random_transformations.crop_size-self.input_height)//2
+                stem_position_target += np.array([offset_x, offset_y]).reshape(1, 2)
+
+                # transform positions
+                stem_position_target = self.random_transformations.apply_geometric_transformation_to_points(stem_position_target).astype(np.int)
+
+                # only use stems inside transformed image
+                inside_image = ((stem_position_target[..., 0]>=0)&(stem_position_target[..., 0]<self.input_width)
+                                &(stem_position_target[..., 1]>=0)&(stem_position_target[..., 1]<self.input_height))
+                stem_position_target = stem_position_target[inside_image]
 
         # get keypoint mask and offsets
         stem_keypoint_target, stem_offset_target = self._make_stem_target(stem_position_target)
@@ -215,10 +274,10 @@ class SugarBeetDataset(Dataset):
         input_tensor = torch.cat([rgb_tensor, nir_tensor], dim=0)
 
         # convert targets to tensors
-        semantic_target_tensor = torch.from_numpy(semantic_target) # shape (target_height, target_width,)
+        semantic_target_tensor = torch.from_numpy(semantic_target.astype(np.int)) # shape (target_height, target_width,)
 
-        stem_keypoint_target_tensor = torch.from_numpy(stem_keypoint_target) # shape (1, target_height, target_width,)
-        stem_offset_target_tensor = torch.from_numpy(stem_offset_target) # shape (2, target_height, target_width,)
+        stem_keypoint_target_tensor = torch.from_numpy(stem_keypoint_target.astype(np.float32)) # shape (1, target_height, target_width,)
+        stem_offset_target_tensor = torch.from_numpy(stem_offset_target.astype(np.float32)) # shape (2, target_height, target_width,)
 
         # get the stem count and append zeros to stem_position_target
         # so all loaded tensors have the same shape
@@ -226,16 +285,20 @@ class SugarBeetDataset(Dataset):
         stem_count_target_tensor = torch.tensor(stem_count_target)
 
         if stem_count_target>0:
-            stem_position_target = np.append(stem_position_target, np.zeros((MAX_STEM_COUNT-stem_count_target, 2,), dtype=np.float32), axis=0)
-            # put position coordinates in y, x to be consistent with what we use in the interference part
-            # TODO use this order right from the beginning
+            # pad with zeros so we have all targets in a batch of the same shape (MAX_STEM_COUNT, 2,)
+            stem_position_target = np.append(stem_position_target.astype(np.float32), np.zeros((MAX_STEM_COUNT-stem_count_target, 2,), dtype=np.float32), axis=0)
         else:
             stem_position_target = np.zeros((MAX_STEM_COUNT, 2,), dtype=np.float32)
 
-        stem_position_target_tensor = torch.from_numpy(np.stack([stem_position_target[:, 1], stem_position_target[:, 0]], axis=1))
+        stem_position_target_tensor = torch.from_numpy(stem_position_target)
 
-        # TODO provide this as a dict
-        return input_tensor, semantic_target_tensor, stem_keypoint_target_tensor, stem_offset_target_tensor, stem_position_target_tensor, stem_count_target_tensor
+        target = {'semantic': semantic_target_tensor,
+                  'stem_keypoint': stem_keypoint_target_tensor,
+                  'stem_offset': stem_offset_target_tensor,
+                  'stem_position': stem_position_target_tensor,
+                  'stem_count': stem_count_target_tensor}
+
+        return input_tensor, target
 
 
     def _make_semantic_target(self, semantic_label):
@@ -247,6 +310,19 @@ class SugarBeetDataset(Dataset):
         semantic_target = np.where(semantic_label==self.label_ignore, 3, semantic_target)
 
         return semantic_target
+
+
+    def _pad_with_zeros(self, image):
+        if len(image.shape)>2:
+            image_padded = np.zeros((self.random_transformations.crop_size, self.random_transformations.crop_size, image.shape[2]), dtype=image.dtype)
+        else:
+            image_padded = np.zeros((self.random_transformations.crop_size, self.random_transformations.crop_size), dtype=image.dtype)
+
+        offset_x = (self.random_transformations.crop_size-self.input_width)//2
+        offset_y = (self.random_transformations.crop_size-self.input_height)//2
+        image_padded[offset_y:offset_y+self.input_height, offset_x:offset_x+self.input_width] = image
+
+        return image_padded
 
 
     @classmethod
@@ -407,3 +483,170 @@ class SugarBeetDataset(Dataset):
         return len(self.filenames)
 
 
+class RandomTransformations:
+    """
+    Note: Adapted from code originally written for MGE-MSR-P-S.
+    """
+
+    @classmethod
+    def from_config(cls, split):
+        assert split in ['train'] # no augmentation for val and test split
+
+        config = load_config('training.yaml')
+
+        transformations_config = load_config('random_transformations.yaml')
+
+        parameters = {**transformations_config}
+
+        parameters['input_width'] = config['input_width']
+        parameters['input_height'] = config['input_height']
+
+        return RandomTransformations(**parameters)
+
+    def __init__(self,
+                 input_width,
+                 input_height,
+                 rotate,
+                 flip_x,
+                 flip_y,
+                 scale_min,
+                 scale_max,
+                 shear_min,
+                 shear_max,
+                 translation_min,
+                 translation_max,
+                 brightness_min,
+                 brightness_max,
+                 saturation_min,
+                 saturation_max,
+                 contrast_min,
+                 contrast_max,
+                 blur_min,
+                 blur_max):
+
+        self.input_width = input_width
+        self.input_height = input_height
+        self.rotate = rotate
+        self.flip_x = flip_x
+        self.flip_y = flip_y
+        self.scale_min = scale_min
+        self.scale_max = scale_max
+        self.shear_min = shear_min
+        self.shear_max = shear_max
+        self.translation_min = translation_min
+        self.translation_max = translation_max
+        self.brightness_min = brightness_min
+        self.brightness_max = brightness_max
+        self.saturation_min = saturation_min
+        self.saturation_max = saturation_max
+        self.contrast_min = contrast_min
+        self.contrast_max = contrast_max
+        self.blur_min = blur_min
+        self.blur_max = blur_max
+
+        self.crop_size = self._compute_max_range()
+
+    def _compute_max_range(self):
+        '''Pixel size of the maximum square region affetcted by a random transformation.
+        '''
+        return int(np.ceil(np.reciprocal(self.scale_min)*
+                           np.reciprocal(1.0+self.shear_min)*
+                           np.maximum(self.input_width, self.input_height)+
+                           2.0*np.maximum(np.absolute(self.translation_max),
+                                          np.absolute(self.translation_min))))
+
+    def sample_transformation(self, seed):
+        '''Sample transformation parameters given the provided seed and set transformation matrix.
+        '''
+        random = np.random.RandomState(seed)
+
+        # sample transformation matrix for geometric transformation
+        scale_x = random.uniform(self.scale_min,
+                                 self.scale_max)
+        scale_y = random.uniform(self.scale_min,
+                                 self.scale_max)
+        shear_x = random.uniform(self.shear_min,
+                                 self.shear_max)
+        shear_y = random.uniform(self.shear_min,
+                                 self.shear_max)
+        translation_x = random.uniform(self.translation_min,
+                                       self.translation_max)
+        translation_y = random.uniform(self.translation_min,
+                                       self.translation_max)
+
+        rotation_angle = 0.0 # random.uniform(0, 2.0*np.pi) if self.rotate else 1.0
+        flip_x = random.choice([1.0, -1.0]) if self.flip_x else 1.0
+        flip_y = random.choice([1.0, -1.0]) if self.flip_y else 1.0
+
+        translation_1 = np.eye(3, dtype=np.float)
+        translation_1[0, 2] = -0.5*self.crop_size
+        translation_1[1, 2] = -0.5*self.crop_size
+
+        scaling = np.eye(3, dtype=np.float)
+        scaling[0, 0] = flip_x * scale_x
+        scaling[1, 1] = flip_y * scale_y
+        scaling[0, 1] = shear_x
+        scaling[1, 0] = shear_y
+        scaling[2, 2] = 1.0
+
+        rotation = np.eye(3, dtype=np.float)
+        rotation[0, 0] = np.cos(rotation_angle)
+        rotation[1, 1] = np.cos(rotation_angle)
+        rotation[0, 1] = -np.sin(rotation_angle)
+        rotation[1, 0] = np.sin(rotation_angle)
+        rotation[2, 2] = 1.0
+
+        translation_2 = np.eye(3, dtype=np.float)
+        translation_2[0, 2] = 0.5*self.input_width + translation_x
+        translation_2[1, 2] = 0.5*self.input_height + translation_y
+
+        self.transformation_matrix = (translation_2@rotation@scaling@translation_1)
+
+        # sample parameters for color transformation and blur
+        self.brightness = random.uniform(self.brightness_min,
+                                         self.brightness_max)
+        self.saturation = random.uniform(self.saturation_min,
+                                         self.saturation_max)
+        self.contrast = random.uniform(self.contrast_min,
+                                       self.contrast_max)
+        self.blur = random.uniform(self.blur_min,
+                                   self.blur_max)
+
+    def apply_geometric_transformation_to_image(self, image, interpolation):
+        image_height, image_width = image.shape[:2]
+        assert image_height == self.crop_size and image_width == self.crop_size
+        return cv2.warpAffine(image,
+                              self.transformation_matrix[:2, :],
+                              (self.input_width, self.input_height),
+                              flags=interpolation)
+
+    def apply_color_transformation_to_image(self, image):
+        # saturation
+        if len(image.shape)>2 and image.shape[2]==3:
+            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            hsv[..., 1] = np.clip((hsv[..., 1]+255.0*self.saturation), 0, 255).astype(np.uint8)
+            image = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+        # contrast
+        mean = (np.mean(image) if len(image.shape)==2
+                else np.mean(image.reshape(self.input_height*self.input_width, image.shape[2]),
+                             axis=0).reshape(1, 1, image.shape[2]))
+        image = np.clip((1.0+self.contrast)*(image-mean)+mean, 0, 255).astype(np.uint8)
+
+        # brightness
+        image = np.clip(image + 255.0*self.brightness, 0, 255).astype(np.uint8)
+
+        # blur
+        if self.blur > 0.0:
+            image = cv2.GaussianBlur(image, (0, 0), sigmaX=self.blur)
+
+        return image
+
+    def apply_geometric_transformation_to_points(self, points):
+        num_points = points.shape[0]
+
+        # using homogeneous coordinates
+        points = np.stack([points[:, 0], points[:, 1], np.ones((num_points, ), dtype=np.float)], axis=-1)
+
+        transformed_points = ((self.transformation_matrix@points.T).T)[:, :2]
+        return transformed_points

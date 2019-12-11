@@ -22,10 +22,10 @@ Semantic segmentation and stem detection for agricultural robotics using ROS.
 Set the following environment variables (e.g. by adding to your `.bashrc`):
 
 ```
-export M26_G1_SEMANTICS_DATA_DIR="/path/to/training/dataset/"
-export M26_G1_SEMANTICS_LOGS_DIR="/path/to/training/logs/"
-export M26_G1_SEMANTICS_MODELS_DIR="/path/to/model/weight/files/"
-export M26_G1_SEMANTICS_CONFIGS_DIR="/path/to/config/yaml/files/"
+export M26_G1_SEMANTICS_DATA_DIR="/path/to/training/dataset/folder/"
+export M26_G1_SEMANTICS_LOGS_DIR="/path/to/training/logs/folder/"
+export M26_G1_SEMANTICS_MODELS_DIR="/path/to/folder/with/model/weight/files/"
+export M26_G1_SEMANTICS_CONFIGS_DIR="/path/to/folder/with/config/yaml/files/"
 export M26_G1_SEMANTICS_CUDA_DEVICE_NAME="cuda" or "cuda:1" or ...
 ```
 
@@ -64,9 +64,28 @@ If you want to do evaluation only:
 python training/script/train.py --only-eval
 ```
 
+#### Freeze a model to deploy
+
+As .onnx to load with TensorRT:
+
+```
+python training/scripts/export_model.py -t onnx
+```
+
+As .pt to load with Pytorch/Torch:
+
+```
+python training/scripts/export_model.py -t pt
+```
+
 ### Deployment phase
 
 #### Setup
+
+```
+export M26_G1_SEMANTICS_BAGS_DIR="/path/to/folder/with/bag/files/"
+export M26_G1_SEMANTICS_MODELS_DIR="/path/to/folder/with/model/weight/files/"
+```
 
 ##### TensorRT
 

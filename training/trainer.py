@@ -24,14 +24,17 @@ class Trainer:
     def from_config(cls):
         config = load_config('training.yaml')
 
-        dataset = SugarBeetDataset.from_config()
+        dataset_train = SugarBeetDataset.from_config('train')
+        dataset_val = SugarBeetDataset.from_config('val')
+
         model = Model.by_name(architecture_name=config['architecture_name'],
                               phase='training',
                               path_to_weights_file=config['path_to_weights_file'],
                               verbose=True)
 
         trainer_parameters = {**config}
-        trainer_parameters['dataset'] = dataset
+        trainer_parameters['dataset_train'] = dataset_train
+        trainer_parameters['dataset_val'] = dataset_val
         trainer_parameters['model'] = model
         del trainer_parameters['architecture_name']
         del trainer_parameters['path_to_weights_file']
@@ -44,13 +47,13 @@ class Trainer:
                  batch_size,
                  num_epochs,
                  model,
-                 dataset,
+                 dataset_train,
+                 dataset_val,
                  input_channels,
                  input_height,
                  input_width,
                  target_height,
                  target_width,
-                 size_test_set,
                  semantic_loss_weight,
                  stem_loss_weight,
                  stem_classification_loss_weight,
@@ -71,12 +74,13 @@ class Trainer:
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.num_epochs = num_epochs
+        self.dataset_train = dataset_train
+        self.dataset_val = dataset_val
         self.input_channels = input_channels
         self.input_height = input_height
         self.input_width = input_width
         self.target_height = target_height
         self.target_width = target_width
-        self.size_test_set = size_test_set
         self.semantic_loss_weight = semantic_loss_weight
         self.stem_loss_weight = stem_loss_weight
         self.stem_classification_loss_weight = stem_classification_loss_weight
@@ -91,19 +95,12 @@ class Trainer:
 
         self.device = torch.device(CUDA_DEVICE_NAME) if torch.cuda.is_available() else torch.device('cpu')
 
-        self.dataset = dataset
         self.model = model.to(self.device)
 
-        # split dataset into train and test set
-        seed = 0 # reproducible order
-        random = np.random.RandomState(seed)
-        indices = random.permutation(len(dataset)).tolist()
-        dataset_train = torch.utils.data.Subset(self.dataset, indices[:-size_test_set])
-        dataset_test = torch.utils.data.Subset(self.dataset, indices[-size_test_set:])
 
         # init data loaders for splits
-        self.data_loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=self.batch_size, shuffle=True)
-        self.data_loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=1, shuffle=False)
+        self.data_loader_train = torch.utils.data.DataLoader(self.dataset_train, batch_size=self.batch_size, shuffle=True)
+        self.data_loader_val = torch.utils.data.DataLoader(self.dataset_val, batch_size=1, shuffle=False)
 
         # init losses
         self.semantic_loss_function = nn.CrossEntropyLoss(ignore_index=3,
@@ -162,25 +159,29 @@ class Trainer:
             # need to change that before we can do stem inference here
             accumulated_confusion_matrix_stem_train = np.zeros((2, 2,), dtype=np.long)
             mean_mean_dev_train = 0
-            for batch_index, batch in enumerate(self.data_loader_train):
+            for batch_index, (input_batch, target_batch) in enumerate(self.data_loader_train):
                 print('Train batch {}/{} in epoch {}/{}.'.format(batch_index, len(self.data_loader_train), epoch_index, self.num_epochs))
 
                 self.model.train()
                 self.optimizer.zero_grad()
 
                 # unpack batch
-                (input_batch,
-                 semantic_target_batch,
-                 stem_keypoint_target_batch,
-                 stem_offset_target_batch,
-                 stem_position_target_batch,
-                 stem_count_target_batch) = batch
+                semantic_target_batch = target_batch['semantic']
+                stem_keypoint_target_batch = target_batch['stem_keypoint']
+                stem_offset_target_batch = target_batch['stem_offset']
 
                 # bring to device
                 input_batch = input_batch.to(self.device)
                 semantic_target_batch = semantic_target_batch.to(self.device)
                 stem_keypoint_target_batch = stem_keypoint_target_batch.to(self.device)
                 stem_offset_target_batch = stem_offset_target_batch.to(self.device)
+
+                # debug output
+                # input_image = vis.tensor_to_false_color(input_batch[0, :3], input_batch[0, 3],
+                                                        # **self.dataset_train.normalization_rgb_dict,
+                                                        # **self.dataset_train.normalization_nir_dict)
+                # cv2.imshow('input', input_image)
+                # cv2.waitKey()
 
                 # foward pass
                 semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = self.model(input_batch)
@@ -291,20 +292,18 @@ class Trainer:
         if not examples_dir.exists():
             examples_dir.mkdir()
 
-        accumulated_confusion_matrix_test = np.zeros((3, 3), np.long)
-        accumulated_confusion_matrix_stem_test = np.zeros((2,2), np.long)
-        # REVIEW instead of computing mean of mean per image, accumulate over all images
-        accumulated_deviation_test = 0.0
-        for batch_index, batch in enumerate(self.data_loader_test):
+        accumulated_confusion_matrix_val = np.zeros((3, 3), np.long)
+        accumulated_confusion_matrix_stem_val = np.zeros((2,2), np.long)
+        accumulated_deviation_val = 0.0
+        for batch_index, (input_batch, target_batch) in enumerate(self.data_loader_val):
             self.model.eval()
 
             # unpack batch
-            (input_batch,
-             semantic_target_batch,
-             stem_keypoint_target_batch,
-             stem_offset_target_batch,
-             stem_position_target_batch,
-             stem_count_target_batch) = batch
+            semantic_target_batch = target_batch['semantic']
+            stem_keypoint_target_batch = target_batch['stem_keypoint']
+            stem_offset_target_batch = target_batch['stem_offset']
+            stem_position_target_batch = target_batch['stem_position']
+            stem_count_target_batch = target_batch['stem_count']
 
             input_batch = input_batch.to(self.device)
             semantic_target_batch = semantic_target_batch.to(self.device)
@@ -321,7 +320,7 @@ class Trainer:
 
             if test_run:
                 image_false_color = vis.tensor_to_false_color(input_batch[0, :3], input_batch[0, 3],
-                        **self.dataset.normalization_rgb_dict, **self.dataset.normalization_nir_dict)
+                        **self.dataset_val.normalization_rgb_dict, **self.dataset_val.normalization_nir_dict)
                 cv2.imshow('input', image_false_color)
                 # cv2.waitKey()
 
@@ -342,59 +341,59 @@ class Trainer:
                             test_run=test_run)
 
             # compute IoU and Accuracy over every batch
-            accumulated_confusion_matrix_test += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
+            accumulated_confusion_matrix_val += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
 
             # comute stem metrics
-            confusion_matrix_stem_test, deviation_test = compute_stem_metrics(stem_position_output_batch, stem_position_target_list, tolerance_radius=self.tolerance_radius)
-            accumulated_confusion_matrix_stem_test += confusion_matrix_stem_test
-            accumulated_deviation_test += deviation_test
+            confusion_matrix_stem_val, deviation_val = compute_stem_metrics(stem_position_output_batch, stem_position_target_list, tolerance_radius=self.tolerance_radius)
+            accumulated_confusion_matrix_stem_val += confusion_matrix_stem_val
+            accumulated_deviation_val += deviation_val
 
             # debug
-            if test_run and batch_index==2:
+            if test_run and batch_index==3:
                 break
 
-        print('Save confusion matrix of test.')
-        plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_test, normalize=False, filename=self.current_checkpoint_name+'_test.png')
-        plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_stem_test, normalize=False, class_names=['stem', 'no_stem'], filename=self.current_checkpoint_name+'_stem_test.png')
+        print("Save confusion matrix of 'val' split.")
+        plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_val, normalize=False, filename=self.current_checkpoint_name+'_val.png')
+        plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_stem_val, normalize=False, class_names=['stem', 'no_stem'], filename=self.current_checkpoint_name+'_stem_val.png')
 
         # calculate metrics on accumulated confusion matrix
-        metrics_test = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_test)
+        metrics_val = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_val)
 
-        # TODO we do not have a valid number of false negatives for stem detection, so some metrics computed here will not be valid
-        metrics_stem_test = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_test)
+        # NOTE we do not have a valid number of false negatives for stem detection, so some metrics computed here will not be valid
+        metrics_stem_val = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_stem_val)
 
-        print('Calculate metrics of test.')
-        write_metrics_to_file(self.current_checkpoint_dir, metrics_test, filename=self.current_checkpoint_name+'_test.yaml')
-        write_metrics_to_file(self.current_checkpoint_dir, metrics_stem_test, class_names=['stem', 'no_stem'], filename=self.current_checkpoint_name+'_stem_test.yaml')
+        print("Calculate metrics of split 'val'.")
+        write_metrics_to_file(self.current_checkpoint_dir, metrics_val, filename=self.current_checkpoint_name+'_val.yaml')
+        write_metrics_to_file(self.current_checkpoint_dir, metrics_stem_val, class_names=['stem', 'no_stem'], filename=self.current_checkpoint_name+'_stem_val.yaml')
 
-        mean_accuracy = np.mean(np.asarray(metrics_test['accuracy'])[1:]) # without background
-        mean_iou = np.mean(np.asarray(metrics_test['iou'])[1:]) # without background
+        mean_accuracy = np.mean(np.asarray(metrics_val['accuracy'])[1:]) # without background
+        mean_iou = np.mean(np.asarray(metrics_val['iou'])[1:]) # without background
 
         print('  Mean IoU (without background): {:.04f}'.format(mean_iou))
-        print("  IoU 'background': {:.04f}".format(metrics_test['iou'][0]))
-        print("  IoU 'weed': {:.04f}".format(metrics_test['iou'][1]))
-        print("  IoU 'sugar beet': {:.04f}".format(metrics_test['iou'][2]))
+        print("  IoU 'background': {:.04f}".format(metrics_val['iou'][0]))
+        print("  IoU 'weed': {:.04f}".format(metrics_val['iou'][1]))
+        print("  IoU 'sugar beet': {:.04f}".format(metrics_val['iou'][2]))
         print('  Mean accuracy (without background): {:.04f}'.format(mean_accuracy))
-        print("  Accuracy 'background': {:.04f}".format(metrics_test['accuracy'][0]))
-        print("  Accuracy 'weed': {:.04f}".format(metrics_test['accuracy'][1]))
-        print("  Accuracy 'sugar beet': {:.04f}".format(metrics_test['accuracy'][2]))
-        print("  Accuracy stem detection with {:.01f} px tolerance: {:.04f}".format(self.tolerance_radius, metrics_stem_test['accuracy'][0]))
-        print("  Mean deviation stems within {:.01f} px tolerance: {:.04f} px".format(self.tolerance_radius, accumulated_deviation_test/accumulated_confusion_matrix_stem_test[0, 0]))
+        print("  Accuracy 'background': {:.04f}".format(metrics_val['accuracy'][0]))
+        print("  Accuracy 'weed': {:.04f}".format(metrics_val['accuracy'][1]))
+        print("  Accuracy 'sugar beet': {:.04f}".format(metrics_val['accuracy'][2]))
+        print("  Accuracy stem detection with {:.01f} px tolerance: {:.04f}".format(self.tolerance_radius, metrics_stem_val['accuracy'][0]))
+        print("  Mean deviation stems within {:.01f} px tolerance: {:.04f} px".format(self.tolerance_radius, accumulated_deviation_val/(accumulated_confusion_matrix_stem_val[0, 0]+1e-6)))
 
 
     def make_plots(self, path, input_slice, semantic_output, stem_keypoint_output, stem_offset_output, stem_position_output, stem_position_target, test_run):
         """Make plots and write images.
         """
-        image_bgr = vis.tensor_to_bgr(input_slice[:3], **self.dataset.normalization_rgb_dict)
-        image_nir = vis.tensor_to_single_channel(input_slice[3], **self.dataset.normalization_nir_dict)
+        image_bgr = vis.tensor_to_bgr(input_slice[:3], **self.dataset_val.normalization_rgb_dict)
+        image_nir = vis.tensor_to_single_channel(input_slice[3], **self.dataset_val.normalization_nir_dict)
         image_false_color = vis.tensor_to_false_color(input_slice[:3], input_slice[3],
-                **self.dataset.normalization_rgb_dict, **self.dataset.normalization_nir_dict)
+                **self.dataset_val.normalization_rgb_dict, **self.dataset_val.normalization_nir_dict)
         plot_semantics = vis.make_plot_from_semantic_output(input_rgb=input_slice[:3],
                                                             input_nir=input_slice[3],
                                                             semantic_output=semantic_output,
                                                             apply_softmax=False,
-                                                            **self.dataset.normalization_rgb_dict,
-                                                            **self.dataset.normalization_nir_dict)
+                                                            **self.dataset_val.normalization_rgb_dict,
+                                                            **self.dataset_val.normalization_nir_dict)
 
         plot_stems_keypoint_offset = vis.make_plot_from_stem_keypoint_offset_output(input_rgb=input_slice[:3],
                                                                                     input_nir=input_slice[3],
@@ -403,16 +402,16 @@ class Trainer:
                                                                                     keypoint_radius=self.keypoint_radius,
                                                                                     apply_sigmoid=False,
                                                                                     apply_tanh=False,
-                                                                                    **self.dataset.normalization_rgb_dict,
-                                                                                    **self.dataset.normalization_nir_dict)
+                                                                                    **self.dataset_val.normalization_rgb_dict,
+                                                                                    **self.dataset_val.normalization_nir_dict)
 
         plot_stems = vis.make_plot_from_stem_output(input_rgb=input_slice[:3],
                                                     input_nir=input_slice[3],
                                                     stem_position_output=stem_position_output,
                                                     stem_position_target=stem_position_target,
                                                     keypoint_radius=self.keypoint_radius,
-                                                    **self.dataset.normalization_rgb_dict,
-                                                    **self.dataset.normalization_nir_dict)
+                                                    **self.dataset_val.normalization_rgb_dict,
+                                                    **self.dataset_val.normalization_nir_dict)
 
         path_rgb = path.parent/(path.name+'_rgb.jpg')
         path_nir = path.parent/(path.name+'_nir.jpg')

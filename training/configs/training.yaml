@@ -28,14 +28,12 @@ weight_sugar_beet: 0.15
 weight_stem_background: 0.1
 weight_stem: 0.9
 
-size_test_set: 50
-
 architecture_name: 'simple_unet' # 'fcn', 'simple_unet'
 path_to_weights_file: 'simple_unet.pth'
 
-stem_inference_device_option: 'cuda' # 'cuda' (= CUDA), 'cpu' (= Pytorch C++ API), 'naive' (= numpy)
+stem_inference_device_option: 'pytorch' # 'cuda' (= CUDA), 'cpu' (= Pytorch C++ API), 'pytorch' (= pytorch index_put)
 stem_inference_threshold_votes: 0.001 # pixel with a keypoint confidence below this value do not cast votes at all
-stem_inference_threshold_peaks: 0.5 # only pixels with accumulated votes larger than this value are considered as stems
+stem_inference_threshold_peaks: 0.1 # 0.001 # only pixels with accumulated votes larger than this value are considered as stems
 stem_inference_kernel_size_votes: 5 # pixels also vote for neighbors within this window, should be odd
 stem_inference_kernel_size_peaks: 9 # non-maximum suppression for all peaks in this window, should be odd
 
