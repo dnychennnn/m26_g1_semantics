@@ -75,8 +75,10 @@ python training/scripts/export_model.py -t onnx
 As .pt to load with Pytorch/Torch:
 
 ```
-python training/scripts/export_model.py -t pt
+python training/scripts/export_model.py -t pt --device cpu
 ```
+
+Note the option `--device cpu`. We did only test the CPU version of Pytorch/Torch for deployment (see below).
 
 ### Deployment phase
 
@@ -116,6 +118,20 @@ To:
 
 ```
 set(TENSORRT_ENABLED FALSE)
+```
+
+##### LibTorch
+
+A build of Libtorch can be downloaded from the [pytorch website](https://pytorch.org/).
+Select `Package=Libtorch`, `Language=C++` and `CUDA=None`, which will mean to run the network
+on the CPU. Add the libaries to your library path and set an environment variable which allows
+our CMake script to locate Torch.
+
+```
+export TORCH_LIBRARY_PATH="/path/to/libtorch/libtorch/lib/"
+export LD_LIBRARY_PATH=${TORCH_LIBRARY_PATH}:$LD_LIBRARY_PATH
+
+export LIBTORCH_CMAKE_MODULE_PATH="/home/jan/ge/tools/libtorch/share/cmake/"
 ```
 
 ### Coding style

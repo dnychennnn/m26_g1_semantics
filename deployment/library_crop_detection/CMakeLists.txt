@@ -8,8 +8,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 ## Flags to explicitly enable/disable CUDA/TensorRT
 set(CUDA_ENABLED TRUE)
 set(TENSORRT_ENABLED TRUE)
+set(TORCH_ENABLED TRUE)
 message(STATUS "Enable build with CUDA: ${CUDA_ENABLED}")
 message(STATUS "Enable build with TensorRT: ${TENSORRT_ENABLED}")
+message(STATUS "Enable build with Torch: ${TORCH_ENABLED}")
 
 ## Build type is debug by default
 if(NOT CMAKE_BUILD_TYPE)
@@ -24,7 +26,7 @@ if(${CMAKE_BUILD_TYPE} MATCHES Debug)
 endif()
 
 ## Warnings and optimaization
-set(CMAKE_CXX_FLAGS "-Wall -Wextra")
+# set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
@@ -101,6 +103,22 @@ if(TENSORRT_ENABLED)
   endif(NVONNXPARSER_LIBRARY)
 endif(TENSORRT_ENABLED)
 
+## Find Torch
+if(TORCH_ENABLED)
+  set(Torch_DIR "$ENV{LIBTORCH_CMAKE_MODULE_PATH}/Torch")
+  find_package(Torch REQUIRED)
+  if(TORCH_FOUND)
+    message(STATUS "Found Torch.")
+    #if(DEFINED ENV{TORCH_LIBRARY_PATH})
+      #set(TORCH_LIBRARY_PATH $ENV{TORCH_LIBRARY_PATH})
+    #else()
+      #message(WARNING "Environment varibale TORCH_LIBRARY_PATH not set.")
+    #endif(DEFINED ENV{TORCH_LIBRARY_PATH})
+  else()
+    message(WARNING "Torch not found.")
+  endif(TORCH_FOUND)
+endif(TORCH_ENABLED)
+
 if(CUDA_ENABLED AND CUDA_FOUND)
   set(CUDA_AVAILABLE TRUE)
 endif()
@@ -113,7 +131,11 @@ if(TENSORRT_AVAILABLE AND NVONNXPARSER_INCLUDE_DIRS AND NVONNXPARSER_LIBRARY)
   set(TENSORRT_ONNX_PARSER_AVAILABLE TRUE)
 endif()
 
-## Set preprocessor flags for CUDA specific code
+if(TORCH_ENABLED AND TORCH_FOUND)
+  set(TORCH_AVAILABLE TRUE)
+endif()
+
+## Set preprocessor flags for CUDA specific code and nvcc flags
 if (CUDA_AVAILABLE)
   message(STATUS "Build with CUDA.")
   add_definitions(-DCUDA_AVAILABLE)
@@ -139,6 +161,15 @@ if(TENSORRT_ONNX_PARSER_AVAILABLE)
 else()
   message(STATUS "Build without TensorRT ONNX Parser.")
 endif(TENSORRT_ONNX_PARSER_AVAILABLE)
+
+## Set preprocessor flags for Torch specific code and cmake flags for Torch
+if(TORCH_AVAILABLE)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+  add_definitions(-DTORCH_AVAILABLE)
+  #list(APPEND ${TORCH_LIBRARY_PATH} CMAKE_PREFIX_PATH)
+else()
+  message(STATUS "Build without Torch.")
+endif(TORCH_AVAILABLE)
 
 
 ################################################
@@ -186,6 +217,10 @@ if(TENSORRT_ONNX_PARSER_AVAILABLE)
   include_directories(${NVONNXPARSER_INCLUDE_DIRS})
 endif(TENSORRT_ONNX_PARSER_AVAILABLE)
 
+if(TORCH_AVAILABLE)
+  include_directories(${TORCH_INCLUDE_DIRS})
+endif(TORCH_AVAILABLE)
+
 ## Declare a C++ library
 
 add_library(${PROJECT_NAME}
@@ -209,6 +244,10 @@ if(TENSORRT_ONNX_PARSER_AVAILABLE)
   target_link_libraries(${PROJECT_NAME} ${NVONNXPARSER_LIBRARY})
 endif(TENSORRT_ONNX_PARSER_AVAILABLE)
 
+if(TORCH_AVAILABLE)
+  target_link_libraries(${PROJECT_NAME} ${TORCH_LIBRARIES})
+endif(TORCH_AVAILABLE)
+
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
@@ -219,23 +258,31 @@ endif(TENSORRT_ONNX_PARSER_AVAILABLE)
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/library_crop_detection_node.cpp)
 
-add_executable(${PROJECT_NAME}_network_demo src/network_demo.cpp)
+add_executable(${PROJECT_NAME}_tensorrt_network_demo src/tensorrt_network_demo.cpp)
+add_executable(${PROJECT_NAME}_pytorch_network_demo src/pytorch_network_demo.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
 ## e.g. "rosrun someones_pkg node" instead of "rosrun someones_pkg someones_pkg_node"
-set_target_properties(${PROJECT_NAME}_network_demo PROPERTIES OUTPUT_NAME network_demo PREFIX "")
+set_target_properties(${PROJECT_NAME}_tensorrt_network_demo PROPERTIES OUTPUT_NAME tensorrt_network_demo PREFIX "")
+set_target_properties(${PROJECT_NAME}_pytorch_network_demo PROPERTIES OUTPUT_NAME pytorch_network_demo PREFIX "")
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(${PROJECT_NAME}_network_demo
+target_link_libraries(${PROJECT_NAME}_tensorrt_network_demo
   ${catkin_LIBRARIES}
   ${PROJECT_NAME}
 )
+
+target_link_libraries(${PROJECT_NAME}_pytorch_network_demo
+  ${catkin_LIBRARIES}
+  ${PROJECT_NAME}
+)
+
 
 #############
 ## Install ##

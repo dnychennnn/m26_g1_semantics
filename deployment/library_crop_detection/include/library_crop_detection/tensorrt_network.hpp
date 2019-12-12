@@ -97,7 +97,7 @@ private:
   std::vector<float> mean_;
   std::vector<float> std_;
 
-  void* host_buffer_ = nullptr; // for input only, memors for results is provided by igg::NetworkInference
+  void* host_buffer_ = nullptr; // for input only, memory for results is provided by igg::NetworkInference
   std::vector<void*> device_buffers_; // one for each binding
 
   const OpencvStemInference kStemInference_;
