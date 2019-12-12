@@ -33,7 +33,7 @@ def export_model(architecture_name, path_to_weights_file, path_to_output_file, d
     if not path_to_output_file.is_absolute():
         path_to_output_file = MODELS_DIR/path_to_output_file
 
-    click.echo('Wrinting result to {}'.format(path_to_output_file))
+    click.echo('Writing result to {}'.format(path_to_output_file))
 
     # get input size from configuration file
     config = load_config('deployment.yaml')
@@ -43,6 +43,8 @@ def export_model(architecture_name, path_to_weights_file, path_to_output_file, d
     batch_size = config['batch_size']
 
     model = model.to(device)
+    model.eval()
+
     dummy_input = torch.randn(batch_size, input_channels, input_height, input_width, device=device)
     model(dummy_input)
 
@@ -56,7 +58,6 @@ def export_model(architecture_name, path_to_weights_file, path_to_output_file, d
                           output_names=['semantic_output', 'stem_keypoint_output', 'stem_offset_output'],
                           verbose=False)
     elif file_type=='pt':
-        model.eval()
         traced_script_module = torch.jit.trace(model, dummy_input)
         traced_script_module.save(str(path_to_output_file))
 

@@ -25,7 +25,7 @@ int main() {
 
   const igg::NetworkParameters kParameters;
 
-  // create out network instance
+  // create network instance
   igg::TensorrtNetwork network(kParameters);
 
   // load onnx file or use serialized engine if available

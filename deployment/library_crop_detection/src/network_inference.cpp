@@ -123,6 +123,14 @@ cv::Mat NetworkInference::SemanticClassConfidence(const int kClassIndex) {
   return this->semantic_class_confidences_[kClassIndex]; // copy the cv::Mat head here
 }
 
+cv::Mat NetworkInference::SemanticClassConfidenceAsUint8(const int kClassIndex) {
+  cv::Mat confidence = this->SemanticClassConfidence(kClassIndex);
+  cv::Mat confidence_converted;
+  confidence *= 255.0;
+  confidence.convertTo(confidence_converted, CV_8UC1);
+  return confidence_converted;
+}
+
 
 cv::Mat NetworkInference::StemKeypointConfidence() {
   return this->stem_keypoint_confidence_; // copies the cv::Mat head only

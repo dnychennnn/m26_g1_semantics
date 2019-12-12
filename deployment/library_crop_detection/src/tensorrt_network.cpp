@@ -131,7 +131,6 @@ void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, con
   context->destroy();
 
   // postprocessing
-
   this->kStemInference_.Infer(result);
 
   #endif // TENSORRT_AVAILABLE
