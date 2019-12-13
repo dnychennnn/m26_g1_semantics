@@ -86,10 +86,6 @@ if(TENSORRT_ENABLED)
     message(WARNING "NVINFER_LIBRARY not found.")
   endif(NVINFER_LIBRARY)
 
-# Skip TensorRT
-set(NVINFER_INCLUDE_DIRS "")
-set(NVINFER_LIBRARY "")
-
   # Find TensorRT onnx parser
   find_path(NVONNXPARSER_INCLUDE_DIRS NvOnnxParser.h
             HINT $ENV{NVONNXPARSER_INCLUDE_DIRS})
