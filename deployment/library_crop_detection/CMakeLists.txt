@@ -49,7 +49,9 @@ endif(OpenCV_FOUND)
 
 ## Find Boost
 find_package(Boost REQUIRED filesystem)
-add_definitions(-DBOOST_ERROR_CODE_HEADER_ONLY)
+
+# add_definitions(-DBOOST_ERROR_CODE_HEADER_ONLY)
+
 if(Boost_FOUND)
   message(STATUS "Found Boost version: ${Boost_VERSION}")
   #message(STATUS "Boost directories: ${Boost_INCLUDE_DIRS}")
