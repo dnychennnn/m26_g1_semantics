@@ -1,5 +1,5 @@
-#ifndef M26_G1_SEMANTICS_DEPLOYMENT_LIBRARY_CROP_DETECTION_INCLUDE_TENSORRT_NETWORK_HPP_
-#define M26_G1_SEMANTICS_DEPLOYMENT_LIBRARY_CROP_DETECTION_INCLUDE_TENSORRT_NETWORK_HPP_
+#ifndef M26_G1_SEMANTICS_DEPLOYMENT_LIBRARY_CROP_DETECTION_INCLUDE_LIBRARY_CROP_DETECTION_TENSORRT_NETWORK_HPP_
+#define M26_G1_SEMANTICS_DEPLOYMENT_LIBRARY_CROP_DETECTION_INCLUDE_LIBRARY_CROP_DETECTION_TENSORRT_NETWORK_HPP_
 
 /*!
  * @file tensorrt_network.hpp
@@ -97,7 +97,7 @@ private:
   std::vector<float> mean_;
   std::vector<float> std_;
 
-  void* host_buffer_ = nullptr; // for input only, memors for results is provided by igg::NetworkInference
+  void* host_buffer_ = nullptr; // for input only, memory for results is provided by igg::NetworkInference
   std::vector<void*> device_buffers_; // one for each binding
 
   const OpencvStemInference kStemInference_;
@@ -134,4 +134,4 @@ private:
 
 } // namespace igg
 
-#endif // M26_G1_SEMANTICS_DEPLOYMENT_LIBRARY_CROP_DETECTION_INCLUDE_TENSORRT_NETWORK_HPP_
+#endif // M26_G1_SEMANTICS_DEPLOYMENT_LIBRARY_CROP_DETECTION_INCLUDE_LIBRARY_CROP_DETECTION_TENSORRT_NETWORK_HPP_
