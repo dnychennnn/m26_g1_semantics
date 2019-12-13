@@ -4,7 +4,9 @@
  * @author Yung-Yu Chen
  * @version 0.1
  */
+
 #include "pytorch_network.hpp"
+
 #include <iostream>
 #include <memory>
 
@@ -40,8 +42,6 @@ PytorchNetwork::~PytorchNetwork() {
 //     mean_{kParameters.mean}, std_{kParameters.std}, kStemInference_{OpencvStemInference({kParameters})} {
 //   this->module_ = new torch::jit::script::Module();
 // }
-
-namespace fs = boost::filesystem;
 
 void PytorchNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, const bool kMinimalInference) {
   #ifdef TORCH_AVAILABLE
