@@ -104,9 +104,8 @@ generate_messages(
 
 catkin_package(
   INCLUDE_DIRS
-    include
-  LIBRARIES
-    ${PROJECT_NAME}
+  include
+  #LIBRARIES
   CATKIN_DEPENDS
     std_msgs
     geometry_msgs
@@ -115,7 +114,7 @@ catkin_package(
     cv_bridge
     image_transport
     library_crop_detection
-#  DEPENDS
+  #DEPENDS
 )
 
 ###########
@@ -124,8 +123,10 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
+message(WARNING "catkin_INCLUDE_DIRS  ${catkin_INCLUDE_DIRS}")
+
 include_directories(
-  include/${PROJECT_NAME}
+  include
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
   ${Boost_INCLUDE_DIRS}

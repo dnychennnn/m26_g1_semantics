@@ -1,12 +1,12 @@
 #include <iostream>
 #include <memory>
 
-#include "pytorch_network.hpp"
-
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
+
+#include "library_crop_detection/pytorch_network.hpp"
 
 int main() {
   // get some test image

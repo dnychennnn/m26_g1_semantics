@@ -5,7 +5,7 @@
  * @version 0.1
  */
 
-#include "crop_detection.hpp"
+#include "ros_crop_detection/crop_detection.hpp"
 
 #include <vector>
 #include <iomanip> // For formatted output
@@ -15,11 +15,10 @@
 #include <boost/bind.hpp>
 #include <opencv2/opencv.hpp>
 
-#include <library_crop_detection/tensorrt_network.hpp>
-#include <library_crop_detection/tensorrt_common.hpp>
+#include "library_crop_detection/tensorrt_common.hpp"
 
 // Custom message wrapping around predicted stem positions
-#include <ros_crop_detection/StemInference.h>
+#include "ros_crop_detection/StemInference.h"
 
 
 namespace igg {

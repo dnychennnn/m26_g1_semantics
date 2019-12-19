@@ -7,7 +7,7 @@
  * @version 0.1
  */
 
-#include "tensorrt_network.hpp"
+#include "library_crop_detection/tensorrt_network.hpp"
 
 #include <iostream>
 

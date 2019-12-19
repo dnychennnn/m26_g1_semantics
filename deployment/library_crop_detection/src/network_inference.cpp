@@ -1,4 +1,5 @@
-#include "network_inference.hpp"
+#include "library_crop_detection/network_inference.hpp"
+
 #include <iostream>
 
 #include <opencv2/core.hpp>

@@ -1,4 +1,4 @@
-#include "opencv_stem_inference.hpp"
+#include "library_crop_detection/opencv_stem_inference.hpp"
 
 #include <iostream>
 

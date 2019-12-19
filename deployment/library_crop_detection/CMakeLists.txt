@@ -112,11 +112,6 @@ if(TORCH_ENABLED)
   find_package(Torch REQUIRED)
   if(TORCH_FOUND)
     message(STATUS "Found Torch.")
-    #if(DEFINED ENV{TORCH_LIBRARY_PATH})
-      #set(TORCH_LIBRARY_PATH $ENV{TORCH_LIBRARY_PATH})
-    #else()
-      #message(WARNING "Environment varibale TORCH_LIBRARY_PATH not set.")
-    #endif(DEFINED ENV{TORCH_LIBRARY_PATH})
   else()
     message(WARNING "Torch not found.")
   endif(TORCH_FOUND)
@@ -186,8 +181,9 @@ endif(TORCH_AVAILABLE)
 ###################################
 
 catkin_package(
-  INCLUDE_DIRS include/${PROJECT_NAME}
-  LIBRARIES ${PROJECT_NAME}
+  INCLUDE_DIRS include
+  LIBRARIES
+  ${PROJECT_NAME}
   CATKIN_DEPENDS
   DEPENDS
 )
@@ -201,8 +197,7 @@ catkin_package(
 
 # Include
 include_directories(
-  include/${PROJECT_NAME}
-  src
+  include
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
   ${Boost_INCLUDE_DIRS}
@@ -316,9 +311,9 @@ install(TARGETS ${PROJECT_NAME}
 )
 
 ## Mark cpp header files for installation
- install(DIRECTORY include/${PROJECT_NAME}/
+install(DIRECTORY include/${PROJECT_NAME}/
    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-   # FILES_MATCHING PATTERN "*.hpp"
+   FILES_MATCHING PATTERN "*.hpp"
    # PATTERN ".gitignore" EXCLUDE
  )
 

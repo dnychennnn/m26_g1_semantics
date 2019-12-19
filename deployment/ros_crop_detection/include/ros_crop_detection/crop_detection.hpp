@@ -17,8 +17,7 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
 
-#include <library_crop_detection/network.hpp>
-#include <library_crop_detection/tensorrt_network.hpp>
+#include "library_crop_detection/tensorrt_network.hpp"
 
 namespace igg {
 

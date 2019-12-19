@@ -5,8 +5,8 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 
-#include "network_inference.hpp"
-#include "tensorrt_network.hpp"
+#include "library_crop_detection/network_inference.hpp"
+#include "library_crop_detection/tensorrt_network.hpp"
 
 int main() {
    //get some test image
