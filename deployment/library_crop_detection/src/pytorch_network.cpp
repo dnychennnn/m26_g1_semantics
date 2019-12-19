@@ -5,7 +5,7 @@
  * @version 0.1
  */
 
-#include "pytorch_network.hpp"
+#include "library_crop_detection/pytorch_network.hpp"
 
 #include <iostream>
 #include <memory>

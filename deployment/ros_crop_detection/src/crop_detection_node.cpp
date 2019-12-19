@@ -15,10 +15,7 @@
 
 #include <ros/ros.h>
 
-#include <library_crop_detection/network_inference.hpp>
-#include <library_crop_detection/tensorrt_network.hpp>
-
-#include "crop_detection.hpp"
+#include "ros_crop_detection/crop_detection.hpp"
 
 
 int main(int argc, char** argv) {
