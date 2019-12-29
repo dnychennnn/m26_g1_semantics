@@ -21,8 +21,8 @@ from training.postprocessing.stem_inference import StemInference
 class Trainer:
 
     @classmethod
-    def from_config(cls):
-        config = load_config('training.yaml')
+    def from_config(cls, training_config_filename='training.yaml'):
+        config = load_config(training_config_filename)
 
         dataset_train = SugarBeetDataset.from_config('train')
         dataset_val = SugarBeetDataset.from_config('val')
@@ -136,10 +136,11 @@ class Trainer:
         # TODO (optional) have a way to resume training from a given checkpoint
 
 
-    def train(self, test_run=False, only_eval=False):
+    def train(self, test_run=False, only_eval=False, overfit=False):
         """
         Args:
             test_run (bool): Only do a few steps an show some output to see everything is working.
+            overfit (bool): Only use the first training batch to see everything is working.
         """
         if test_run:
             print('Test run. Do not trust metrics!')
@@ -153,6 +154,11 @@ class Trainer:
             self.evaluate_on_checkpoint(test_run)
             return
 
+        if overfit:
+            print('Overfit. Do not trust metrics!')
+            self.run_name += '_overfit'
+            first_batch = next(iter(self.data_loader_train))
+
         for epoch_index in range(self.num_epochs):
             accumulated_confusion_matrix_train = np.zeros((3, 3,), dtype=np.long)
             # TODO we do not apply final activations (softmax, sigmoid) in trainig mode,
@@ -164,6 +170,10 @@ class Trainer:
 
                 self.model.train()
                 self.optimizer.zero_grad()
+
+                if overfit:
+                    # use the first batch instead of the current
+                    input_batch, target_batch = first_batch
 
                 # unpack batch
                 semantic_target_batch = target_batch['semantic']
@@ -225,6 +235,14 @@ class Trainer:
                 # accumulated_confusion_matrix_stem_train += stem_cm_train
                 # mean_mean_dev_train += mean_dev_train
 
+                if overfit:
+                    # show the overfitted output so we have a clue if things are working
+                    self.show_images_for_debugging(input_slice=input_batch[0],
+                        semantic_output=semantic_output_batch[0],
+                        stem_keypoint_output=stem_keypoint_output_batch[0],
+                        stem_offset_output=stem_offset_output_batch[0])
+                    cv2.waitKey(1)
+
                 if test_run or only_eval:
                     break
 
@@ -234,6 +252,30 @@ class Trainer:
 
             if test_run or only_eval:
                 break
+
+    def show_images_for_debugging(self, input_slice, semantic_output, stem_keypoint_output, stem_offset_output):
+        image_false_color = vis.tensor_to_false_color(input_slice[:3], input_slice[3],
+            **self.dataset_train.normalization_rgb_dict, **self.dataset_train.normalization_nir_dict)
+        plot_semantics = vis.make_plot_from_semantic_output(input_rgb=input_slice[:3],
+                                                            input_nir=input_slice[3],
+                                                            semantic_output=semantic_output,
+                                                            apply_softmax=True,
+                                                            **self.dataset_train.normalization_rgb_dict,
+                                                            **self.dataset_train.normalization_nir_dict)
+
+        plot_stem_keypoint_offset = vis.make_plot_from_stem_keypoint_offset_output(input_rgb=input_slice[:3],
+                                                                                   input_nir=input_slice[3],
+                                                                                   stem_keypoint_output=stem_keypoint_output,
+                                                                                   stem_offset_output=stem_offset_output,
+                                                                                   keypoint_radius=self.keypoint_radius,
+                                                                                   apply_sigmoid=True,
+                                                                                   apply_tanh=False,
+                                                                                   **self.dataset_train.normalization_rgb_dict,
+                                                                                   **self.dataset_train.normalization_nir_dict)
+
+        cv2.imshow('input', image_false_color)
+        cv2.imshow('semantics', plot_semantics)
+        cv2.imshow('stem_keypoint_offsets', plot_stem_keypoint_offset)
 
 
     def make_checkpoint(self, accumulated_confusion_matrix_train, accumulated_confusion_matrix_stem_train, test_run):

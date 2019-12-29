@@ -15,6 +15,7 @@ from pathlib import Path
 
 from training.models.FCN import FCN
 from training.models.simple_unet import SimpleUnet
+from training.models.hardnet import HarDNet
 from training import MODELS_DIR, CUDA_DEVICE_NAME
 
 class Model:
@@ -34,10 +35,12 @@ class Model:
             model = FCN.from_config(phase)
         elif architecture_name=='simple_unet':
             model = SimpleUnet.from_config(phase)
+        elif architecture_name=='hardnet':
+            model = HarDNet.from_config(phase)
         else:
             raise ValueError("Architechture '{}' is not supported.".format(architecture_name))
 
-        if path_to_weights_file is not None:
+        if path_to_weights_file is not None and path_to_weights_file:
             model = Model.load_weights(model, path_to_weights_file=path_to_weights_file, verbose=verbose)
 
         if verbose:
