@@ -98,10 +98,6 @@ class Trainer:
         self.model = model.to(self.device)
 
 
-        # init data loaders for splits
-        self.data_loader_train = torch.utils.data.DataLoader(self.dataset_train, batch_size=self.batch_size, shuffle=True)
-        self.data_loader_val = torch.utils.data.DataLoader(self.dataset_val, batch_size=1, shuffle=False)
-
         # init losses
         self.semantic_loss_function = nn.CrossEntropyLoss(ignore_index=3,
                 weight=torch.Tensor([self.weight_background, self.weight_weed, self.weight_sugar_beet])).to(self.device)
@@ -142,6 +138,11 @@ class Trainer:
             test_run (bool): Only do a few steps an show some output to see everything is working.
             overfit (bool): Only use the first training batch to see everything is working.
         """
+        # init data loader for each split
+        self.data_loader_train = torch.utils.data.DataLoader(self.dataset_train,
+            batch_size=self.batch_size, shuffle=(False if overfit else True))
+        self.data_loader_val = torch.utils.data.DataLoader(self.dataset_val, batch_size=1, shuffle=False)
+
         if test_run:
             print('Test run. Do not trust metrics!')
 
