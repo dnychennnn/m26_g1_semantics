@@ -252,12 +252,12 @@ class Trainer:
         # TODO (optional) only save best model to save some space
         weights_path = self.current_checkpoint_dir/(self.current_checkpoint_name+'.pth')
         torch.save(self.model.state_dict(), str(weights_path))
-        
+
         # save Torch Script model by tracing a small example
-        torchscript_path = self.current_checkpoint_dir/(self.current_checkpoint_name+'_torchscript.pth')
-        example_input = next(iter(self.data_loader_train))[0].to(self.device)
-        traced_script_module = torch.jit.trace(self.model, example_input)
-        traced_script_module.save(str(torchscript_path))     
+        # torchscript_path = self.current_checkpoint_dir/(self.current_checkpoint_name+'_torchscript.pth')
+        # example_input = next(iter(self.data_loader_train))[0].to(self.device)
+        # traced_script_module = torch.jit.trace(self.model, example_input)
+        # traced_script_module.save(str(torchscript_path))
 
         # save accumulated confusion matrix
         print('Save confusion matrix of training.')
