@@ -1,7 +1,7 @@
 num_filters_encoder: [32, 64, 128]
 num_filters_semantic_decoder: [64, 32]
 num_filters_stem_decoder: [64, 32]
-num_conv_encoder: [2, 2, 2]
-num_conv_semantic_decoder: [2, 2]
-num_conv_stem_decoder: [2, 2]
+num_conv_encoder: [8, 8, 8]
+num_conv_semantic_decoder: [8, 8]
+num_conv_stem_decoder: [8, 8]
 dropout_rate: 0.2

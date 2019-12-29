@@ -5,6 +5,7 @@ Reference: https://github.com/PingoLH/Pytorch-HarDNet
 import torch
 from torch import nn
 import numpy as np
+import math
 
 from training import CONFIGS_DIR, load_config
 from training.models.layers import ConvBlock, ConvSequence
@@ -180,12 +181,22 @@ class Encoder(nn.Module):
         sequences = []
         sequence_input_channels = num_filters[0]
         for sequence_index in range(num_sequences):
-            sequences.append(ConvSequence(input_channels=sequence_input_channels,
-                                          output_channels=num_filters[sequence_index],
-                                          num_conv_blocks=num_conv[sequence_index],
-                                          activation='leaky_relu',
-                                          dropout_rate=dropout_rate))
-            sequence_input_channels = num_filters[sequence_index]
+            hard_block = HarDBlock(input_channels=sequence_input_channels,
+                                       output_channels=num_filters[sequence_index],
+                                       num_conv_blocks=num_conv[sequence_index],
+                                       activation='leaky_relu',
+                                       dropout_rate=dropout_rate)
+
+            sequences.append(hard_block)
+
+            sequence_input_channels = hard_block.get_output_channels()
+
+            # sequences.append(ConvSequence(input_channels=sequence_input_channels,
+                                          # output_channels=num_filters[sequence_index],
+                                          # num_conv_blocks=num_conv[sequence_index],
+                                          # activation='leaky_relu',
+                                          # dropout_rate=dropout_rate))
+            # sequence_input_channels = num_filters[sequence_index]
         self.sequences = nn.ModuleList(sequences)
 
 
@@ -252,3 +263,130 @@ class Decoder(nn.Module):
             x = sequence(x)
 
         return x
+
+
+class HarDBlock(nn.Module):
+
+    def __init__(self,
+                 input_channels,
+                 output_channels,
+                 num_conv_blocks,
+                 activation,
+                 dropout_rate):
+        super().__init__()
+
+        growth_rate = 8
+        channels_weighting_factor = 1.8
+
+        self.links = []
+        conv_blocks = []
+
+        self.output_channels = 0
+
+        for conv_block_index in range(num_conv_blocks):
+            (block_output_channels,
+            block_input_channels,
+            link,) = self.get_link(conv_block_index=conv_block_index+1,
+                                   block_base_channels=input_channels,
+                                   growth_rate=growth_rate,
+                                   channels_weighting_factor=channels_weighting_factor)
+            self.links.append(link)
+
+            # debug output
+            print('index', conv_block_index)
+            print('in', block_input_channels)
+            print('out', block_output_channels)
+            print('link', link)
+            print('------')
+
+            conv_blocks.append(ConvBlock(input_channels=block_input_channels,
+                                         output_channels=block_output_channels,
+                                         kernel_size=3,
+                                         padding=1,
+                                         activation=activation,
+                                         dropout_rate=dropout_rate))
+
+            if conv_block_index==num_conv_blocks-1 or conv_block_index%2==0:
+                self.output_channels += block_output_channels
+
+        self.conv_blocks = nn.ModuleList(conv_blocks)
+
+        print('final out', self.output_channels)
+        print('------')
+
+
+    def get_output_channels(self):
+        return self.output_channels
+
+
+    def get_link(self,
+                 conv_block_index,
+                 block_base_channels,
+                 growth_rate,
+                 channels_weighting_factor):
+        """
+        Returns:
+            A tuple of number of output channels, number of input channels
+            and list containing the indices of the linked blocks.
+        """
+        if conv_block_index == 0:
+            return block_base_channels, 0, []
+
+        block_output_channels = growth_rate
+        link = []
+
+        for wave_index in range(10):
+            wave_length = 2**wave_index
+
+            if conv_block_index%wave_length==0:
+                linked_block_index = conv_block_index-wave_length
+                link.append(linked_block_index)
+
+                if wave_index!=0:
+                    block_output_channels *= channels_weighting_factor
+
+        # bring to a close and even integer
+        block_output_channels = int(int(block_output_channels+1.0)/2.0)*2
+
+        block_input_channels = 0
+
+        # sum over all linked blocks to get the total number of input channels
+        for linked_block_index in link:
+            linked_output_channels, _, _ = self.get_link(linked_block_index,
+                                                        block_base_channels,
+                                                        growth_rate,
+                                                        channels_weighting_factor)
+            block_input_channels += linked_output_channels
+
+        return block_output_channels, block_input_channels, link
+
+
+    def forward(self, x):
+        block_outputs = [x]
+
+        for conv_block_index, conv_block in enumerate(self.conv_blocks):
+            link = self.links[conv_block_index]
+
+            block_inputs = []
+
+            # add output from linked blocks as inputs
+            for linked_block_index in link:
+                block_inputs.append(block_outputs[linked_block_index])
+
+            if len(block_inputs)>1:
+                x = torch.cat(block_inputs, dim=1)
+            else:
+                x = block_inputs[0]
+
+            block_output = conv_block(x)
+            block_outputs.append(x)
+
+        final_outputs = []
+        num_conv_bocks = len(self.conv_blocks)
+
+        for conv_block_index in num_conv_bocks:
+            if conv_block_index==0 or conv_block_index==num_conv_bocks-1 or conv_block_index%2==1:
+                final_output.append(block_outputs[conv_block_index])
+
+        return torch.cat(final_outputs, dim=1)
+
