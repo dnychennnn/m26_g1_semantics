@@ -1,5 +1,10 @@
 """
+An encoder network using harmonic densely connected blocks proposed to reduce memory traffic.
+
 Reference: https://github.com/PingoLH/Pytorch-HarDNet
+
+Code is very similar to the reference implementation on github,
+naming was adopted for consistency and to clarify things for ourselves.
 """
 
 import torch
@@ -14,305 +19,154 @@ from training.models.layers import ConvBlock, ConvSequence
 class HarDNet(nn.Module):
 
     @classmethod
-    def from_config(cls, phase):
+    def from_config(cls, architecture_name, phase):
         """
         Args:
             phase (str): 'training' or 'deployment'
         """
+        hardnet_config = load_config(architecture_name+'.yaml')
+
         config = load_config('training.yaml') if phase=='training' else load_config('deployment.yaml')
-        model_config = load_config('hardnet.yaml')
 
-        model_parameters = {**model_config}
+        hardnet_config.update(config)
 
-        model_parameters['phase'] = phase
-        model_parameters['input_channels'] = config['input_channels']
-        model_parameters['input_height'] = config['input_height']
-        model_parameters['input_width'] = config['input_width']
-
-        return HarDNet(**model_parameters)
+        hardnet_parameters = {**hardnet_config}
+        return HarDNet(**hardnet_parameters)
 
 
     def __init__(self,
-                 phase,
-                 input_channels,
-                 input_height,
-                 input_width,
-                 num_filters_encoder,
-                 num_filters_semantic_decoder,
-                 num_filters_stem_decoder,
-                 num_conv_encoder,
-                 num_conv_semantic_decoder,
-                 num_conv_stem_decoder,
-                 dropout_rate):
+                 initial_conv_output_channels,
+                 num_conv_blocks_per_stage,
+                 output_channels_per_stage,
+                 growth_rate_per_stage,
+                 do_downsampling_per_stage,
+                 provide_as_output_per_stage,
+                 channels_weighting_factor,
+                 dropout_rate,
+                 **extra_arguments):
         super().__init__()
 
-        self.phase = phase
+        module_list = []
+        block_input_channels = initial_conv_output_channels
 
-        # make encoder
-        self.encoder = Encoder(input_channels=input_channels,
-                               num_filters=num_filters_encoder,
-                               num_conv=num_conv_encoder,
-                               dropout_rate=dropout_rate)
+        self.is_output_module = []
 
-        decoder_input_channels = num_filters_encoder[-1] # output of encoder
-        skip_channels = list(reversed(num_filters_encoder[:-1])) # same for both heads
+        for (num_conv_blocks,
+             output_channels,
+             growth_rate,
+             do_downsampling,
+             provide_as_output,) in zip(num_conv_blocks_per_stage,
+                                      output_channels_per_stage,
+                                      growth_rate_per_stage,
+                                      do_downsampling_per_stage,
+                                      provide_as_output_per_stage):
 
-        # make decoders
-        self.semantic_decoder = Decoder(input_channels=decoder_input_channels,
-                                        input_height=input_height,
-                                        input_width=input_width,
-                                        skip_channels=skip_channels,
-                                        num_filters=num_filters_semantic_decoder,
-                                        num_conv=num_conv_semantic_decoder,
-                                        dropout_rate=dropout_rate)
+            # debug output
+            print('hardnet stage in, out', block_input_channels, output_channels)
 
-        self.stem_decoder = Decoder(input_channels=decoder_input_channels,
-                                    input_height=input_height,
-                                    input_width=input_width,
-                                    skip_channels=skip_channels,
-                                    num_filters=num_filters_stem_decoder,
-                                    num_conv=num_conv_stem_decoder,
-                                    dropout_rate=dropout_rate)
+            hard_block = HarDBlock(input_channels=block_input_channels,
+                                   num_conv_blocks=num_conv_blocks,
+                                   growth_rate=growth_rate,
+                                   channels_weighting_factor=channels_weighting_factor,
+                                   keep_base=False,
+                                   activation='leaky_relu',
+                                   dropout_rate=dropout_rate)
 
-        # final convolutional sequences
-        self.final_sequence_semantic = ConvSequence(input_channels=num_filters_semantic_decoder[-1],
-                                                    output_channels=num_filters_semantic_decoder[-1],
-                                                    num_conv_blocks=2,
-                                                    activation='leaky_relu',
-                                                    dropout_rate=None)
+            module_list.append(hard_block)
+            self.is_output_module.append(False)
 
-        self.final_sequence_stem_keypoint = ConvSequence(input_channels=num_filters_stem_decoder[-1],
-                                                         output_channels=num_filters_stem_decoder[-1],
-                                                         num_conv_blocks=2,
-                                                         activation='leaky_relu',
-                                                         dropout_rate=None)
+            # debug output
+            print('hardblock out', hard_block.get_output_channels())
 
-        self.final_sequence_stem_offset = ConvSequence(input_channels=num_filters_stem_decoder[-1],
-                                                       output_channels=num_filters_stem_decoder[-1],
-                                                       num_conv_blocks=2,
-                                                       activation='leaky_relu',
-                                                       dropout_rate=None)
+            # transitional 1x1 convolution to get desired number of output channels
 
-        # final convolution with no activation to get right number of output dimensions
-        self.final_conv_semantic = ConvBlock(input_channels=num_filters_semantic_decoder[-1],
-                                             output_channels=3, # three classes: background, weed, sugar beet
+            transition_block = HarDConvBlock(input_channels=hard_block.get_output_channels(),
+                                             output_channels=output_channels,
                                              kernel_size=1,
                                              padding=0,
-                                             activation=None,
+                                             activation='leaky_relu',
                                              dropout_rate=None)
 
+            module_list.append(transition_block)
+            self.is_output_module.append(True if provide_as_output else False)
 
-        self.final_conv_stem_keypoint = ConvBlock(input_channels=num_filters_stem_decoder[-1],
-                                                  output_channels=1, # one output: stem confidence
-                                                  kernel_size=1,
-                                                  padding=0,
-                                                  activation=None,
-                                                  dropout_rate=None)
+            # downsampling
 
-        self.final_conv_stem_offset = ConvBlock(input_channels=num_filters_stem_decoder[-1],
-                                                output_channels=2, # two outputs: offset x, offset y
-                                                kernel_size=1,
-                                                padding=0,
-                                                activation=None,
-                                                dropout_rate=None)
+            if do_downsampling:
+                downsampling = HarDDepthWiseConvBlock(input_channels=output_channels,
+                                                      output_channels=output_channels,
+                                                      stride=2)
+                module_list.append(downsampling)
+                self.is_output_module.append(False)
 
-        # softmax of logits of semantic output, applied in evel mode only
-        self.softmax_semantic = nn.Softmax(dim=1)
+            block_input_channels = output_channels
 
-        # sigmoid of logits of stem keypoint output, apllied in eval mode only
-        self.sigmoid_stem_keypoint = nn.Sigmoid()
+        self.module_list = nn.ModuleList(module_list)
 
 
     def forward(self, x):
-        x, skips = self.encoder(x)
+        outputs = []
+        for module, provide_as_ouput in zip(self.module_list, self.is_output_module):
+            x = module(x)
 
-        semantic_output = self.semantic_decoder(x, skips)
-        # print('semantic_output', semantic_output.shape)
-        semantic_output = self.final_sequence_semantic(semantic_output)
-        # print('semantic_output', semantic_output.shape)
-        semantic_output = self.final_conv_semantic(semantic_output)
-        # print('semantic_output', semantic_output.shape)
+            if provide_as_ouput:
+                outputs.append(x)
 
-        if not self.training:
-          # we are in evaluation mode
-          # apply softmax to logits of semantic output
-          semantic_output = self.softmax_semantic(semantic_output)
-
-        stem_output = self.stem_decoder(x, skips)
-        # print('stem_output', stem_output.shape)
-
-        stem_keypoint_output = self.final_sequence_stem_keypoint(stem_output)
-        # print('stem_keypoint_output', stem_keypoint_output.shape)
-        stem_keypoint_output = self.final_conv_stem_keypoint(stem_keypoint_output)
-        # print('stem_keypoint_output', stem_keypoint_output.shape)
-
-        if not self.training:
-          # we are in evaluation mode
-          # apply sigmoid to logits of stem keypoint output
-          stem_keypoint_output = self.sigmoid_stem_keypoint(stem_keypoint_output)
-
-        stem_offset_output = self.final_sequence_stem_offset(stem_output)
-        # print('stem_offset_output', stem_offset_output.shape)
-        stem_offset_output = self.final_conv_stem_offset(stem_offset_output)
-        # print('stem_offset_output', stem_offset_output.shape)
-
-        return semantic_output, stem_keypoint_output, stem_offset_output
+        # debug output
+        # print('hardnet all out:')
+        # for output in outputs:
+            # print('    * '+str(output.shape))
 
 
-class Encoder(nn.Module):
-
-    def __init__(self,
-                 input_channels,
-                 num_filters,
-                 num_conv,
-                 dropout_rate):
-        super(Encoder, self).__init__()
-
-        self.initial_conv = ConvBlock(input_channels=input_channels,
-                                      output_channels=num_filters[0],
-                                      kernel_size=1,
-                                      padding=0,
-                                      activation='leaky_relu',
-                                      dropout_rate=dropout_rate)
-
-        assert len(num_filters)==len(num_conv)
-        num_sequences = len(num_filters)
-
-        sequences = []
-        sequence_input_channels = num_filters[0]
-        for sequence_index in range(num_sequences):
-            hard_block = HarDBlock(input_channels=sequence_input_channels,
-                                       output_channels=num_filters[sequence_index],
-                                       num_conv_blocks=num_conv[sequence_index],
-                                       activation='leaky_relu',
-                                       dropout_rate=dropout_rate)
-
-            sequences.append(hard_block)
-
-            sequence_input_channels = hard_block.get_output_channels()
-
-            # sequences.append(ConvSequence(input_channels=sequence_input_channels,
-                                          # output_channels=num_filters[sequence_index],
-                                          # num_conv_blocks=num_conv[sequence_index],
-                                          # activation='leaky_relu',
-                                          # dropout_rate=dropout_rate))
-            # sequence_input_channels = num_filters[sequence_index]
-        self.sequences = nn.ModuleList(sequences)
-
-
-    def forward(self, x):
-         x = self.initial_conv(x)
-         skips = []
-         for sequence_index, sequence in enumerate(self.sequences):
-             x = sequence(x)
-             if sequence_index!=len(self.sequences)-1:
-                 # for the last block do not downsample, do not remember skip
-                 skips.insert(0, x) # insert first
-                 x = nn.functional.max_pool2d(x, kernel_size=2, stride=2)
-         return x, skips
-
-
-class Decoder(nn.Module):
-
-    def __init__(self,
-                 input_channels,
-                 input_height,
-                 input_width,
-                 skip_channels,
-                 num_filters,
-                 num_conv,
-                 dropout_rate):
-      super(Decoder, self).__init__()
-
-      assert len(num_filters)==len(num_conv) and len(num_filters)==len(skip_channels)
-      num_sequences = len(num_filters)
-
-      sequences = []
-      upsampling_modules = []
-      sequence_input_channels = input_channels
-      for sequence_index in range(num_sequences):
-          sequences.append(ConvSequence(input_channels=sequence_input_channels+skip_channels[sequence_index],
-                                        output_channels=num_filters[sequence_index],
-                                        num_conv_blocks=num_conv[sequence_index],
-                                        activation='leaky_relu',
-                                        dropout_rate=dropout_rate))
-          sequence_input_channels = num_filters[sequence_index]
-
-          # infer the downsamples size from input size
-          # this is necessary if we use input sizes not dividable by two
-          downsampling_count = num_sequences-sequence_index-1
-          downsampling_height = input_height
-          downsampling_width = input_width
-          for index in range(downsampling_count):
-            downsampling_height = int(np.floor(0.5*downsampling_height))
-            downsampling_width = int(np.floor(0.5*downsampling_width))
-
-          # add upsampling module with the right size
-          # we cannot use nn.functional.upsample as this will make the onnx export fail
-          upsampling_modules.append(nn.Upsample(size=(downsampling_height, downsampling_width), mode='nearest'))
-
-      self.sequences = nn.ModuleList(sequences)
-      self.upsampling_modules = nn.ModuleList(upsampling_modules)
-
-
-    def forward(self, x, skips):
-        for sequence_index, (sequence, upsampling_module) in enumerate(zip(self.sequences, self.upsampling_modules)):
-            x = upsampling_module(x)
-
-            x = torch.cat([x, skips[sequence_index]], dim=1)
-            x = sequence(x)
-
-        return x
+        return outputs
 
 
 class HarDBlock(nn.Module):
 
     def __init__(self,
                  input_channels,
-                 output_channels,
                  num_conv_blocks,
+                 growth_rate,
+                 channels_weighting_factor,
+                 keep_base,
                  activation,
                  dropout_rate):
         super().__init__()
-
-        growth_rate = 8
-        channels_weighting_factor = 1.8
 
         self.links = []
         conv_blocks = []
 
         self.output_channels = 0
+        self.keep_base = keep_base
 
         for conv_block_index in range(num_conv_blocks):
             (block_output_channels,
-            block_input_channels,
-            link,) = self.get_link(conv_block_index=conv_block_index+1,
-                                   block_base_channels=input_channels,
-                                   growth_rate=growth_rate,
-                                   channels_weighting_factor=channels_weighting_factor)
+             block_input_channels,
+             link,) = self.get_link(conv_block_index=conv_block_index+1,
+                                    block_base_channels=input_channels,
+                                    growth_rate=growth_rate,
+                                    channels_weighting_factor=channels_weighting_factor)
             self.links.append(link)
 
             # debug output
-            print('index', conv_block_index)
-            print('in', block_input_channels)
-            print('out', block_output_channels)
-            print('link', link)
-            print('------')
+            # print('block index', conv_block_index)
+            # print('block in', block_input_channels)
+            # print('block out', block_output_channels)
+            # print('block link', link)
 
-            conv_blocks.append(ConvBlock(input_channels=block_input_channels,
-                                         output_channels=block_output_channels,
-                                         kernel_size=3,
-                                         padding=1,
-                                         activation=activation,
-                                         dropout_rate=dropout_rate))
+            conv_blocks.append(HarDCombinedConvBlock(input_channels=block_input_channels,
+                                                     output_channels=block_output_channels,
+                                                     activation=activation,
+                                                     dropout_rate=dropout_rate))
 
             if conv_block_index==num_conv_blocks-1 or conv_block_index%2==0:
+                # use output of every second block plus output of the final block
                 self.output_channels += block_output_channels
 
         self.conv_blocks = nn.ModuleList(conv_blocks)
 
-        print('final out', self.output_channels)
-        print('------')
+        # debug output
+        # print('block final out', self.output_channels)
 
 
     def get_output_channels(self):
@@ -330,7 +184,7 @@ class HarDBlock(nn.Module):
             and list containing the indices of the linked blocks.
         """
         if conv_block_index == 0:
-            return block_base_channels, 0, []
+            return (block_base_channels, 0, [],)
 
         block_output_channels = growth_rate
         link = []
@@ -353,12 +207,12 @@ class HarDBlock(nn.Module):
         # sum over all linked blocks to get the total number of input channels
         for linked_block_index in link:
             linked_output_channels, _, _ = self.get_link(linked_block_index,
-                                                        block_base_channels,
-                                                        growth_rate,
-                                                        channels_weighting_factor)
+                                                         block_base_channels,
+                                                         growth_rate,
+                                                         channels_weighting_factor)
             block_input_channels += linked_output_channels
 
-        return block_output_channels, block_input_channels, link
+        return (block_output_channels, block_input_channels, link,)
 
 
     def forward(self, x):
@@ -378,15 +232,122 @@ class HarDBlock(nn.Module):
             else:
                 x = block_inputs[0]
 
-            block_output = conv_block(x)
+            # debug output
+            # print('hard block link', link)
+            # print('hard block intermediate in', x.shape)
+
+            x = conv_block(x)
             block_outputs.append(x)
 
+            # debug output
+            # print('hard block intermediate out', x.shape)
+
+            # print('hard block all outputs so far:')
+            # for output in block_outputs:
+                # print('    * ' + str(output.shape))
+
+
         final_outputs = []
-        num_conv_bocks = len(self.conv_blocks)
+        num_block_outputs = len(block_outputs)
 
-        for conv_block_index in num_conv_bocks:
-            if conv_block_index==0 or conv_block_index==num_conv_bocks-1 or conv_block_index%2==1:
-                final_output.append(block_outputs[conv_block_index])
+        for block_output_index in range(num_block_outputs):
+            if ((block_output_index==0 and self.keep_base)
+                or block_output_index==num_block_outputs-1
+                or block_output_index%2==1):
+                final_outputs.append(block_outputs[block_output_index])
 
-        return torch.cat(final_outputs, dim=1)
+        # debug output
+        # print('all hard block final outputs:')
+        # for output in final_outputs:
+            # print('    * ' + str(output.shape))
+
+        final_outputs = torch.cat(final_outputs, dim=1)
+
+        # debug output
+        # print('final hard block out', final_outputs.shape)
+
+        return final_outputs
+
+
+class HarDCombinedConvBlock(nn.Sequential):
+    """
+    A 1x1 concolutional block and a depth-wise 3x3 convolutional block combined.
+    """
+    def __init__(self,
+                 input_channels,
+                 output_channels,
+                 activation,
+                 dropout_rate):
+        super().__init__()
+
+        self.add_module('conv_block', HarDConvBlock(input_channels=input_channels,
+                                                    output_channels=output_channels,
+                                                    kernel_size=1,
+                                                    padding=0,
+                                                    activation=activation,
+                                                    dropout_rate=dropout_rate))
+
+        self.add_module('depth_wise_conv_block',
+                        HarDDepthWiseConvBlock(input_channels=output_channels,
+                                               output_channels=output_channels,
+                                               stride=1))
+
+
+class HarDConvBlock(nn.Sequential):
+  def __init__(self,
+               input_channels,
+               output_channels,
+               kernel_size,
+               padding,
+               activation,
+               dropout_rate):
+      super().__init__()
+      self.add_module('conv', nn.Conv2d(input_channels,
+                                        out_channels=output_channels,
+                                        kernel_size=kernel_size,
+                                        stride=1,
+                                        padding=padding,
+                                        bias=False))
+      self.add_module('batch_norm', nn.BatchNorm2d(output_channels))
+
+      if activation=='relu':
+          self.add_module('relu', nn.ReLU())
+      elif activation=='leaky_relu':
+          self.add_module('leaky_relu', nn.LeakyReLU())
+      elif activation=='sigmoid':
+          self.add_module('sigmoid', nn.Sigmoid())
+      elif activation=='tanh':
+          self.add_module('tanh', nn.Tanh())
+      elif activation=='softmax':
+          self.add_module('softmax', nn.Softmax(dim=1))
+      elif activation is None or activation=='none':
+          pass
+      else:
+          warnings.warn("Convolutional block with not-supported activation '{}'.".format(activation))
+
+      if dropout_rate is not None and dropout_rate>0.0:
+          self.add_module('dropout', nn.Dropout2d(dropout_rate))
+
+
+class HarDDepthWiseConvBlock(nn.Sequential):
+
+  def __init__(self,
+               input_channels,
+               output_channels,
+               stride):
+      super().__init__()
+
+      self.add_module('depth_wise_conv',
+                      nn.Conv2d(input_channels,
+                                out_channels=output_channels,
+                                kernel_size=3,
+                                stride=stride,
+                                padding=1,
+                                groups=output_channels,
+                                bias=False))
+
+      self.add_module('batch_norm',
+                      nn.BatchNorm2d(output_channels))
+
+      # note there is no activation applied here
 

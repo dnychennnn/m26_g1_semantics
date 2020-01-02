@@ -28,44 +28,62 @@ class SugarBeetDataset(Dataset):
     """
 
     @classmethod
-    def from_config(cls, split):
+    def from_config(cls, architecture_name, split):
         assert split in ['train', 'val', 'test']
 
+        config = load_config(architecture_name+'.yaml')
+
+        # additional parameters for training
         training_config = load_config('training.yaml')
+        config.update(training_config)
+
+        # additional parameters for dataset
         dataset_config = load_config('sugar_beet_dataset.yaml')
+        config.update(dataset_config)
 
-        dataset_parameters = {**dataset_config}
-        dataset_parameters['input_height'] = training_config['input_height']
-        dataset_parameters['input_width'] = training_config['input_width']
-        dataset_parameters['target_height'] = training_config['target_height']
-        dataset_parameters['target_width'] = training_config['target_width']
-        dataset_parameters['keypoint_radius'] = training_config['keypoint_radius']
-
-        del dataset_parameters['train']
-        del dataset_parameters['val']
-        del dataset_parameters['test']
+        dataset_parameters = {**config}
 
         # only use files of the given split as specified in config
         # we have 100 in 'val', 100 in 'test' and the rest in 'train'
-        dataset_parameters['filenames_filter'] = dataset_config[split]
+        dataset_parameters['filenames_filter'] = load_config(split+'_split.yaml')
 
         # data augmentation for train split
-        dataset_parameters['random_transformations'] = (RandomTransformations.from_config('train')
-                                                        if split=='train' else None)
+        if split=='train':
+            random_transformations = RandomTransformations.from_config(architecture_name, 'train')
+        else:
+            random_transformations = None
+
+        dataset_parameters['random_transformations'] = random_transformations
 
         return SugarBeetDataset(**dataset_parameters)
 
 
     def __init__(self,
-                 label_background, label_ignore, label_weed, label_sugar_beet,
-                 input_height, input_width, target_height, target_width,
-                 mean_rgb, mean_nir, std_rgb, std_nir,
+                 label_background,
+                 label_ignore,
+                 label_weed,
+                 label_sugar_beet,
+                 input_height,
+                 input_width,
+                 target_height,
+                 target_width,
+                 mean_rgb,
+                 mean_nir,
+                 std_rgb,
+                 std_nir,
                  keypoint_radius,
-                 path_to_rgb_images, suffix_rgb_images,
-                 path_to_nir_images, suffix_nir_images,
-                 path_to_semantic_labels, suffix_semantic_labels,
-                 path_to_yaml_annotations, suffix_yaml_annotations,
-                 random_transformations, seed, filenames_filter):
+                 path_to_rgb_images,
+                 suffix_rgb_images,
+                 path_to_nir_images,
+                 suffix_nir_images,
+                 path_to_semantic_labels,
+                 suffix_semantic_labels,
+                 path_to_yaml_annotations,
+                 suffix_yaml_annotations,
+                 random_transformations,
+                 seed,
+                 filenames_filter,
+                 **extra_arguments):
         """Constructor.
 
         Args:
@@ -489,18 +507,18 @@ class RandomTransformations:
     """
 
     @classmethod
-    def from_config(cls, split):
+    def from_config(cls, architecture_name, split):
         assert split in ['train'] # no augmentation for val and test split
 
-        config = load_config('training.yaml')
+        config = load_config(architecture_name+'.yaml')
+
+        training_config = load_config('training.yaml')
+        config.update(training_config)
 
         transformations_config = load_config('random_transformations.yaml')
+        config.update(transformations_config)
 
-        parameters = {**transformations_config}
-
-        parameters['input_width'] = config['input_width']
-        parameters['input_height'] = config['input_height']
-
+        parameters = {**config}
         return RandomTransformations(**parameters)
 
     def __init__(self,
@@ -522,7 +540,8 @@ class RandomTransformations:
                  contrast_min,
                  contrast_max,
                  blur_min,
-                 blur_max):
+                 blur_max,
+                 **extra_arguments):
 
         self.input_width = input_width
         self.input_height = input_height

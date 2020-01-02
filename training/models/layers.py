@@ -18,12 +18,13 @@ class ConvBlock(nn.Sequential):
                kernel_size,
                padding,
                activation,
+               stride,
                dropout_rate):
       super().__init__()
       self.add_module('conv', nn.Conv2d(input_channels,
                                         out_channels=output_channels,
                                         kernel_size=kernel_size,
-                                        stride=1,
+                                        stride=stride,
                                         padding=padding,
                                         bias=True))
       self.add_module('batch_norm', nn.BatchNorm2d(output_channels))
@@ -61,6 +62,7 @@ class ConvSequence(nn.Sequential):
                           ConvBlock(input_channels=input_channels,
                                     output_channels=output_channels,
                                     kernel_size=3,
+                                    stride=1,
                                     padding=1,
                                     dropout_rate=dropout_rate,
                                     activation=activation))

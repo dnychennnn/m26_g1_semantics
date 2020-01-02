@@ -21,23 +21,25 @@ from training.postprocessing.stem_inference import StemInference
 class Trainer:
 
     @classmethod
-    def from_config(cls, training_config_filename='training.yaml'):
-        config = load_config(training_config_filename)
+    def from_config(cls, architecture_name):
+        config = load_config(architecture_name+'.yaml')
 
-        dataset_train = SugarBeetDataset.from_config('train')
-        dataset_val = SugarBeetDataset.from_config('val')
+        # additional parameters for training
+        training_config = load_config('training.yaml')
+        config.update(training_config)
 
-        model = Model.by_name(architecture_name=config['architecture_name'],
+        dataset_train = SugarBeetDataset.from_config(architecture_name, 'train')
+        dataset_val = SugarBeetDataset.from_config(architecture_name, 'val')
+
+        model = Model.by_name(architecture_name=architecture_name,
                               phase='training',
-                              path_to_weights_file=config['path_to_weights_file'],
                               verbose=True)
 
         trainer_parameters = {**config}
+
         trainer_parameters['dataset_train'] = dataset_train
         trainer_parameters['dataset_val'] = dataset_val
         trainer_parameters['model'] = model
-        del trainer_parameters['architecture_name']
-        del trainer_parameters['path_to_weights_file']
 
         return Trainer(**trainer_parameters)
 
@@ -69,7 +71,8 @@ class Trainer:
                  stem_inference_kernel_size_peaks,
                  stem_inference_threshold_votes,
                  stem_inference_threshold_peaks,
-                 tolerance_radius):
+                 tolerance_radius,
+                 **extra_arguments):
 
         self.learning_rate = learning_rate
         self.batch_size = batch_size

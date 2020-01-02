@@ -236,8 +236,8 @@ class Decoder(nn.Module):
           downsampling_height = input_height
           downsampling_width = input_width
           for index in range(downsampling_count):
-            downsampling_height = int(np.floor(0.5*downsampling_height))
-            downsampling_width = int(np.floor(0.5*downsampling_width))
+              downsampling_height = int(np.floor(0.5*downsampling_height))
+              downsampling_width = int(np.floor(0.5*downsampling_width))
 
           # add upsampling module with the right size
           # we cannot use nn.functional.upsample as this will make the onnx export fail
