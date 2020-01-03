@@ -93,6 +93,7 @@ class HarDNet(nn.Module):
             if do_downsampling:
                 downsampling = HarDDepthWiseConvBlock(input_channels=output_channels,
                                                       output_channels=output_channels,
+                                                      padding=1,
                                                       stride=2)
                 module_list.append(downsampling)
                 self.is_output_module.append(False)
@@ -288,6 +289,7 @@ class HarDCombinedConvBlock(nn.Sequential):
         self.add_module('depth_wise_conv_block',
                         HarDDepthWiseConvBlock(input_channels=output_channels,
                                                output_channels=output_channels,
+                                               padding=1,
                                                stride=1))
 
 
@@ -331,6 +333,7 @@ class HarDDepthWiseConvBlock(nn.Sequential):
     def __init__(self,
                  input_channels,
                  output_channels,
+                 padding,
                  stride):
         super().__init__()
 
@@ -339,7 +342,7 @@ class HarDDepthWiseConvBlock(nn.Sequential):
                                   out_channels=output_channels,
                                   kernel_size=3,
                                   stride=stride,
-                                  padding=1,
+                                  padding=padding,
                                   groups=output_channels,
                                   bias=False))
 

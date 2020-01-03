@@ -143,8 +143,35 @@ class Model(nn.Module):
                                                         provide_as_output_per_stage)
 
         upsampling_modules = []
-        for output_size in output_sizes[:-1]:
+        for size_index, output_size in enumerate(output_sizes[:-1]):
             upsampling_modules.append(nn.Upsample(size=output_size, mode='nearest'))
+
+            # upsampling_module = torch.nn.Sequential()
+
+            # # use transpose convolution instead of nearest/bilinear upsamling to avoid onnx version conflicts
+            # upsampling_module.add_module('deconv', torch.nn.ConvTranspose2d(in_channels=feature_channels,
+                                                                            # out_channels=feature_channels,
+                                                                            # kernel_size=2,
+                                                                            # stride=2,
+                                                                            # padding=1))
+
+            # # zero padding to get size right
+            # input_height, input_width = output_sizes[size_index+1]
+            # output_height, output_width = output_size
+
+            # padding_x = output_width-(input_width-1)*2
+            # padding_y = output_height-(input_height-1)*2
+            # padding_right = padding_x//2
+            # padding_left = padding_x-padding_right
+            # padding_bottom = padding_y//2
+            # padding_top = padding_y-padding_bottom
+
+            # # debug output
+            # # print(padding_left, padding_right, padding_top, padding_bottom)
+
+            # upsampling_module.add_module('zero_padding', nn.ZeroPad2d((padding_left, padding_right, padding_top, padding_bottom)))
+            # upsampling_modules.append(upsampling_module)
+
         self.upsampling_modules = nn.ModuleList(upsampling_modules[::-1])
 
         convs_for_lateral_connections = []
@@ -231,13 +258,13 @@ class Model(nn.Module):
                                                self.upsampling_modules,
                                                self.convs_for_lateral_connections[1:])):
             # debug output
-            # print('x', x.shape)
+            # print('x before upsampling', x.shape)
 
             x = upsampling_module(x)
             y = conv(encoder_output)
 
             # debug output
-            # print('x', x.shape)
+            # print('x after upsampling', x.shape)
             # print('y', y.shape)
 
             x += y
