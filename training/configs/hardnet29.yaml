@@ -1,5 +1,5 @@
 architecture_name: 'hardnet29'
-path_to_weights_file: ''
+path_to_weights_file: 'hardnet29.pth'
 
 batch_size: 4
 input_channels: 4

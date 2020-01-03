@@ -116,18 +116,6 @@ def compute_metrics_from_confusion_matrix(confusion_matrix, eps=1e-6):
   return metrics
 
 
-def write_metrics_to_file(path, metrics, filename, class_names=['background', 'weed', 'sugar_beet']):
-    metrics['class_names'] = class_names
-
-    metrics_dir_path = path/'metrics'
-    if not metrics_dir_path.exists():
-        metrics_dir_path.mkdir()
-    metrics_path = metrics_dir_path/filename
-
-    with metrics_path.open('w+') as yaml_file:
-        yaml.dump(metrics, yaml_file)
-
-
 def plot_confusion_matrix(path,
                           confusion_matrix,
                           filename,
@@ -153,7 +141,7 @@ def plot_confusion_matrix(path,
            # ... and label them with the respective list entries
            xticklabels=class_names, yticklabels=class_names,
            title='Confusion Matrix: '+Path(filename).stem,
-           ylabel='True label',
+           ylabel='Actual label',
            xlabel='Predicted label')
 
     # Rotate the tick labels and set their alignment.

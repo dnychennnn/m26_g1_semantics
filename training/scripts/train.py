@@ -1,6 +1,4 @@
 """Script to train a network.
-
-Author: Jan Quakernack
 """
 import click
 from pathlib import Path

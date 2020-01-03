@@ -4,19 +4,19 @@ learning_rate: 0.001
 num_epochs: 500
 
 # weighting of losses
-semantic_loss_weight: 0.3
-stem_loss_weight: 0.7
-stem_classification_loss_weight: 0.05
-stem_regression_loss_weight: 0.95
+semantic_loss_weight: 10.0
+stem_loss_weight: 1.0
+stem_classification_loss_weight: 1.0
+stem_regression_loss_weight: 10.0
 
 # class weights for semantic segmentation
-weight_background: 0.05
-weight_weed: 0.8
-weight_sugar_beet: 0.15
+weight_background: 1.0
+weight_weed: 10.0
+weight_sugar_beet: 10.0
 
 # class weights for stem keypoint detection
-weight_stem_background: 0.1
-weight_stem: 0.9
+weight_stem_background: 1.0
+weight_stem: 10.0
 
 stem_inference_device_option: 'pytorch' # 'cuda' (= CUDA), 'cpu' (= Pytorch C++ API), 'pytorch' (= pytorch index_put)
 stem_inference_threshold_votes: 0.001 # pixel with a keypoint confidence below this value do not cast votes at all

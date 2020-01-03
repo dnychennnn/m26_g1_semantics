@@ -4,8 +4,6 @@ Usage:
     fcn_model = Model.by_name('fcn', phase='training')
     simple_unet_model = Model.by_name('simple_unet', phase='deployment', path_to_weights_file='simple_unet.pth')
 
-Author: Jan Quakernack
-
 Note: Parts adapted from code originally written for MGE-MSR-P-S.
 """
 

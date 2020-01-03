@@ -8,14 +8,19 @@ from torch import nn
 import datetime
 import numpy as np
 import cv2
+import yaml
 from pathlib import Path
+from torch.utils.tensorboard import SummaryWriter
 
 from training.models.model import Model
 from training.dataloader import SugarBeetDataset
 from training.losses import StemClassificationLoss, StemRegressionLoss
 from training import vis
 from training import LOGS_DIR, MODELS_DIR, CUDA_DEVICE_NAME, load_config
-from training.evalmetrics import compute_confusion_matrix, compute_stem_metrics, compute_metrics_from_confusion_matrix, plot_confusion_matrix, write_metrics_to_file
+from training.evalmetrics import (compute_confusion_matrix,
+                                  compute_stem_metrics,
+                                  compute_metrics_from_confusion_matrix,
+                                  plot_confusion_matrix)
 from training.postprocessing.stem_inference import StemInference
 
 class Trainer:
@@ -45,6 +50,7 @@ class Trainer:
 
 
     def __init__(self,
+                 architecture_name,
                  learning_rate,
                  batch_size,
                  num_epochs,
@@ -74,6 +80,7 @@ class Trainer:
                  tolerance_radius,
                  **extra_arguments):
 
+        self.architecture_name = architecture_name
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.num_epochs = num_epochs
@@ -84,22 +91,33 @@ class Trainer:
         self.input_width = input_width
         self.target_height = target_height
         self.target_width = target_width
-        self.semantic_loss_weight = semantic_loss_weight
-        self.stem_loss_weight = stem_loss_weight
-        self.stem_classification_loss_weight = stem_classification_loss_weight
-        self.stem_regression_loss_weight = stem_regression_loss_weight
-        self.weight_background = weight_background
-        self.weight_weed = weight_weed
-        self.weight_sugar_beet = weight_sugar_beet
-        self.weight_stem_background = weight_stem_background
-        self.weight_stem = weight_stem
         self.keypoint_radius = keypoint_radius
         self.tolerance_radius = tolerance_radius
 
+        # init loss weights
+        loss_norm = semantic_loss_weight+stem_loss_weight
+        stem_loss_norm = stem_classification_loss_weight+stem_regression_loss_weight
+
+        self.semantic_loss_weight = semantic_loss_weight/loss_norm
+        self.stem_classification_loss_weight = stem_classification_loss_weight/stem_loss_norm/loss_norm
+        self.stem_regression_loss_weight = stem_regression_loss_weight/stem_loss_norm/loss_norm
+
+        # init semantic segmentation class weights
+        semantic_norm = weight_background+weight_weed+weight_sugar_beet
+
+        self.weight_background = weight_background/semantic_norm
+        self.weight_weed = weight_weed/semantic_norm
+        self.weight_sugar_beet = weight_sugar_beet/semantic_norm
+
+        # init stem classification weights
+        stem_norm = weight_stem_background+weight_stem
+
+        self.weight_stem_background = weight_stem_background/stem_norm
+        self.weight_stem = weight_stem/stem_norm
+
+        # init model
         self.device = torch.device(CUDA_DEVICE_NAME) if torch.cuda.is_available() else torch.device('cpu')
-
         self.model = model.to(self.device)
-
 
         # init losses
         self.semantic_loss_function = nn.CrossEntropyLoss(ignore_index=3,
@@ -111,26 +129,16 @@ class Trainer:
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
 
         # init postprocessing
-        self.stem_inference_module = StemInference(self.target_width, self.target_height,
+
+        self.stem_inference_module = StemInference(
+                input_width=self.target_width,
+                input_height=self.target_height,
                 keypoint_radius=self.keypoint_radius,
                 threshold_votes=stem_inference_threshold_votes,
                 threshold_peaks=stem_inference_threshold_peaks,
                 kernel_size_votes=stem_inference_kernel_size_votes,
                 kernel_size_peaks=stem_inference_kernel_size_peaks,
                 device_option=stem_inference_device_option).to(self.device)
-
-        # init logs directory
-        now = datetime.datetime.now()
-        run_time_string = now.strftime('%b_%d_%Y_%Hh%M')
-        self.run_name = '{}_{}'.format('simple_unet', run_time_string)
-        self.log_dir = LOGS_DIR/self.run_name
-        if not self.log_dir.exists():
-            self.log_dir.mkdir()
-
-        # start at the first checkpoint
-        self.current_checkpoint_index = 0
-        self.current_checkpoint_name = None
-        self.current_checkpoint_dir = None
 
         # TODO (optional) have a way to resume training from a given checkpoint
 
@@ -141,6 +149,11 @@ class Trainer:
             test_run (bool): Only do a few steps an show some output to see everything is working.
             overfit (bool): Only use the first training batch to see everything is working.
         """
+        # init run name
+        now = datetime.datetime.now()
+        run_time_string = now.strftime('%b_%d_%Y_%Hh%M')
+        self.run_name = '{}_{}'.format(self.architecture_name, run_time_string)
+
         # init data loader for each split
         self.data_loader_train = torch.utils.data.DataLoader(self.dataset_train,
             batch_size=self.batch_size, shuffle=(False if overfit else True))
@@ -150,12 +163,22 @@ class Trainer:
             print('Test run. Do not trust metrics!')
 
         if only_eval:
+            # init logs directory for only eval
             self.run_name += '_only_eval'
+            self.log_dir = LOGS_DIR/self.run_name
+
+            # checkpoint dir same as logs dir as there is only one checkpint
             self.current_checkpoint_dir = self.log_dir/self.run_name
             self.current_checkpoint_name = self.current_checkpoint_dir.name
             if not self.current_checkpoint_dir.exists():
                 self.current_checkpoint_dir.mkdir()
+
+            # init tensorboard summary writer
+            self.summary_writer = SummaryWriter(str(self.log_dir))
+
+            # evaluate
             self.evaluate_on_checkpoint(test_run)
+
             return
 
         if overfit:
@@ -163,12 +186,22 @@ class Trainer:
             self.run_name += '_overfit'
             first_batch = next(iter(self.data_loader_train))
 
+        # init logs directory for training
+        self.log_dir = LOGS_DIR/self.run_name
+        if not self.log_dir.exists():
+            self.log_dir.mkdir()
+
+        # start at the first checkpoint
+        self.current_checkpoint_index = 0
+        self.current_checkpoint_name = None
+        self.current_checkpoint_dir = None
+
+        # init tensorboad summary writer
+        self.summary_writer = SummaryWriter(str(self.log_dir))
+
         for epoch_index in range(self.num_epochs):
-            accumulated_confusion_matrix_train = np.zeros((3, 3,), dtype=np.long)
-            # TODO we do not apply final activations (softmax, sigmoid) in trainig mode,
-            # need to change that before we can do stem inference here
-            accumulated_confusion_matrix_stem_train = np.zeros((2, 2,), dtype=np.long)
-            mean_mean_dev_train = 0
+            accumulated_losses_train = {}
+
             for batch_index, (input_batch, target_batch) in enumerate(self.data_loader_train):
                 print('Train batch {}/{} in epoch {}/{}.'.format(batch_index, len(self.data_loader_train), epoch_index, self.num_epochs))
 
@@ -200,44 +233,20 @@ class Trainer:
                 # foward pass
                 semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = self.model(input_batch)
 
-                # postprocessing
-                stem_output = self.stem_inference_module(stem_keypoint_output_batch, stem_offset_output_batch)
-                # TODO activations see above
-                # TODO adjust the dataloader so it provides target positions directly
-                # stem_target = self.stem_inference_module(stem_keypoint_target_batch, stem_offset_target_batch)
-
-                # compute losses
-                semantic_loss = self.semantic_loss_weight*\
-                                self.semantic_loss_function(semantic_output_batch,
-                                                            semantic_target_batch)
-
-                stem_classification_loss = self.stem_loss_weight*self.stem_classification_loss_weight*\
-                                           self.stem_classification_loss_function(stem_keypoint_output_batch=stem_keypoint_output_batch,
-                                                                                  stem_keypoint_target_batch=stem_keypoint_target_batch)
-
-                stem_regression_loss = self.stem_loss_weight*self.stem_regression_loss_weight*\
-                                       self.stem_regression_loss_function(stem_offset_output_batch=stem_offset_output_batch,
-                                                                          stem_keypoint_target_batch=stem_keypoint_target_batch,
-                                                                          stem_offset_target_batch=stem_offset_target_batch)
-
-                stem_loss = stem_classification_loss+stem_regression_loss
-                loss = semantic_loss+stem_loss
-
-                print('  Loss: {:04f}'.format(loss.item()))
-                print('  Semantic loss: {:04f}'.format(semantic_loss.item()))
-                print('  Stem loss: {:04f}'.format(stem_loss.item()))
-                print('  Stem classification loss: {:04f}'.format(stem_classification_loss.item()))
-                print('  Stem regression loss: {:04f}'.format(stem_regression_loss.item()))
-
-                loss.backward()
+                # backward pass
+                losses = self.compute_losses(semantic_output_batch=semantic_output_batch,
+                                             stem_keypoint_output_batch=stem_keypoint_output_batch,
+                                             stem_offset_output_batch=stem_offset_output_batch,
+                                             semantic_target_batch=semantic_target_batch,
+                                             stem_keypoint_target_batch=stem_keypoint_target_batch,
+                                             stem_offset_target_batch=stem_offset_target_batch)
+                losses['loss'].backward()
                 self.optimizer.step()
 
-                # accumulate confusion matrix
-                accumulated_confusion_matrix_train += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
-                # TODO see above
-                # stem_cm_train, mean_dev_train = compute_stem_metrics(stem_output, stem_target, tolerance_radius=self.tolerance_radius)
-                # accumulated_confusion_matrix_stem_train += stem_cm_train
-                # mean_mean_dev_train += mean_dev_train
+                for key, value in losses.items():
+                    print("  Loss '{}': {:04f}".format(key, value.item()))
+
+                self.accumulate_losses(losses, accumulated_losses_train)
 
                 if overfit:
                     # show the overfitted output so we have a clue if things are working
@@ -252,10 +261,51 @@ class Trainer:
 
             # end of epoch
             print('End of epoch. Make checkpoint. Evaluate.')
-            self.make_checkpoint(accumulated_confusion_matrix_train, accumulated_confusion_matrix_stem_train, test_run=test_run)
+            self.make_checkpoint(accumulated_losses_train=accumulated_losses_train,
+                                 test_run=test_run)
 
-            if test_run or only_eval:
+            if test_run:
                 break
+
+
+    def compute_losses(self,
+                       semantic_output_batch,
+                       stem_keypoint_output_batch,
+                       stem_offset_output_batch,
+                       semantic_target_batch,
+                       stem_keypoint_target_batch,
+                       stem_offset_target_batch):
+
+        # compute losses
+        semantic_loss = (self.semantic_loss_weight
+                         *self.semantic_loss_function(semantic_output_batch,
+                                                      semantic_target_batch))
+
+        stem_classification_loss = (self.stem_classification_loss_weight
+                                    *self.stem_classification_loss_function(stem_keypoint_output_batch=stem_keypoint_output_batch,
+                                                                            stem_keypoint_target_batch=stem_keypoint_target_batch))
+
+        stem_regression_loss = (self.stem_regression_loss_weight
+                                *self.stem_regression_loss_function(stem_offset_output_batch=stem_offset_output_batch,
+                                                                    stem_keypoint_target_batch=stem_keypoint_target_batch,
+                                                                    stem_offset_target_batch=stem_offset_target_batch))
+
+        stem_loss = stem_classification_loss+stem_regression_loss
+        loss = semantic_loss+stem_loss
+
+        return {'semantic_loss': semantic_loss,
+                'stem_classification_loss': stem_classification_loss,
+                'stem_regression_loss': stem_regression_loss,
+                'stem_loss': stem_loss,
+                'loss': loss}
+
+
+    def accumulate_losses(self, losses, accumulated_losses):
+        for key, value in losses.items():
+            if not key in accumulated_losses:
+                accumulated_losses[key] = 0.0
+            accumulated_losses[key] += value.item()
+
 
     def show_images_for_debugging(self, input_slice, semantic_output, stem_keypoint_output, stem_offset_output):
         image_false_color = vis.tensor_to_false_color(input_slice[:3], input_slice[3],
@@ -282,7 +332,9 @@ class Trainer:
         cv2.imshow('stem_keypoint_offsets', plot_stem_keypoint_offset)
 
 
-    def make_checkpoint(self, accumulated_confusion_matrix_train, accumulated_confusion_matrix_stem_train, test_run):
+    def make_checkpoint(self,
+                        accumulated_losses_train,
+                        test_run):
         """
         Args:
             accumulated_confusion_matrix_train (np.array): From training phase.
@@ -299,33 +351,48 @@ class Trainer:
         weights_path = self.current_checkpoint_dir/(self.current_checkpoint_name+'.pth')
         torch.save(self.model.state_dict(), str(weights_path))
 
-        # save Torch Script model by tracing a small example
-        # torchscript_path = self.current_checkpoint_dir/(self.current_checkpoint_name+'_torchscript.pth')
-        # example_input = next(iter(self.data_loader_train))[0].to(self.device)
-        # traced_script_module = torch.jit.trace(self.model, example_input)
-        # traced_script_module.save(str(torchscript_path))
+        # average and save train losses
+        losses_train_norm = len(self.data_loader_train)
+        losses_train = {key: value/losses_train_norm for key, value in accumulated_losses_train.items()}
 
-        # save accumulated confusion matrix
-        print('Save confusion matrix of training.')
-        plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_train, normalize=False, filename=self.current_checkpoint_name+'_training.png')
+        print('Write average losses to tensorboard log.')
+        for key, value in losses_train.items():
+            self.summary_writer.add_scalar('{}/train'.format(key),
+                                           value,
+                                           global_step=self.current_checkpoint_index)
 
-        print('Calculate metrics of training.')
-        # TODO see above
-        # plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_stem_train, normalize=False, class_names=['+', '-'], filename=self.current_checkpoint_name+'_stem_training.png')
-        # calculate metrics on accumulated confusion matrix
-        metrics_train = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_train)
+        print('Write average losses to yaml.')
+        self.write_losses_to_file(path=self.current_checkpoint_dir,
+                                  losses=losses_train,
+                                  filename=self.current_checkpoint_name+'_losses_training.yaml')
 
-        # TODO see above
-        # metrics_stem_train = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_stem_train)
-
-        write_metrics_to_file(self.current_checkpoint_dir, metrics_train, filename=self.current_checkpoint_name+'_training.yaml')
-
-        # TODO see above
-        # write_metrics_to_file(self.current_checkpoint_dir, metrics_stem_train, class_names=['+', '-'], filename=self.current_checkpoint_name+'_stem_training.yaml')
-
+        print("Evaluate on 'val' split.")
         self.evaluate_on_checkpoint(test_run=test_run)
 
         self.current_checkpoint_index += 1
+
+
+
+    def write_losses_to_file(self, path, losses, filename):
+        losses_dir_path = path/'losses'
+        if not losses_dir_path.exists():
+            losses_dir_path.mkdir()
+        losses_path = losses_dir_path/filename
+
+        with losses_path.open('w+') as yaml_file:
+            yaml.dump(losses, yaml_file)
+
+
+    def write_metrics_to_file(self, path, metrics, filename, class_names=['background', 'weed', 'sugar_beet']):
+        metrics['class_names'] = class_names
+
+        metrics_dir_path = path/'metrics'
+        if not metrics_dir_path.exists():
+            metrics_dir_path.mkdir()
+        metrics_path = metrics_dir_path/filename
+
+        with metrics_path.open('w+') as yaml_file:
+            yaml.dump(metrics, yaml_file)
 
 
     def evaluate_on_checkpoint(self, test_run):
@@ -338,9 +405,11 @@ class Trainer:
         if not examples_dir.exists():
             examples_dir.mkdir()
 
+        accumulated_losses_val = {}
         accumulated_confusion_matrix_val = np.zeros((3, 3), np.long)
         accumulated_confusion_matrix_stem_val = np.zeros((2,2), np.long)
         accumulated_deviation_val = 0.0
+
         for batch_index, (input_batch, target_batch) in enumerate(self.data_loader_val):
             self.model.eval()
 
@@ -372,6 +441,17 @@ class Trainer:
 
             # foward pass
             semantic_output_batch, stem_keypoint_output_batch, stem_offset_output_batch = self.model(input_batch)
+
+            # compute losses
+            losses = self.compute_losses(semantic_output_batch=semantic_output_batch,
+                                         stem_keypoint_output_batch=stem_keypoint_output_batch,
+                                         stem_offset_output_batch=stem_offset_output_batch,
+                                         semantic_target_batch=semantic_target_batch,
+                                         stem_keypoint_target_batch=stem_keypoint_target_batch,
+                                         stem_offset_target_batch=stem_offset_target_batch)
+
+            self.accumulate_losses(losses, accumulated_losses_val)
+
             # postprocessing
             stem_position_output_batch = self.stem_inference_module(stem_keypoint_output_batch, stem_offset_output_batch)
             stem_position_target_batch = self.stem_inference_module(stem_keypoint_target_batch, stem_offset_target_batch)
@@ -386,11 +466,12 @@ class Trainer:
                             stem_position_target=stem_position_target_list[0],
                             test_run=test_run)
 
-            # compute IoU and Accuracy over every batch
             accumulated_confusion_matrix_val += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
 
             # comute stem metrics
-            confusion_matrix_stem_val, deviation_val = compute_stem_metrics(stem_position_output_batch, stem_position_target_list, tolerance_radius=self.tolerance_radius)
+            confusion_matrix_stem_val, deviation_val = compute_stem_metrics(stem_position_output_batch,
+                    stem_position_target_list, tolerance_radius=self.tolerance_radius)
+
             accumulated_confusion_matrix_stem_val += confusion_matrix_stem_val
             accumulated_deviation_val += deviation_val
 
@@ -398,9 +479,34 @@ class Trainer:
             if test_run and batch_index==3:
                 break
 
+        # average and save val losses
+
+        losses_val_norm = len(self.data_loader_val)
+        losses_val = {key: value/losses_val_norm for key, value in accumulated_losses_val.items()}
+
+        print("Write average losses of 'val' split to tensorboard log.")
+        for key, value in losses_val.items():
+            self.summary_writer.add_scalar('{}/val'.format(key),
+                                           value,
+                                           global_step=self.current_checkpoint_index)
+
+        print("Write average losses of 'val' split to yaml.")
+        self.write_losses_to_file(path=self.current_checkpoint_dir,
+                                  losses=losses_val,
+                                  filename=self.current_checkpoint_name+'_losses_val.yaml')
+
+
         print("Save confusion matrix of 'val' split.")
-        plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_val, normalize=False, filename=self.current_checkpoint_name+'_val.png')
-        plot_confusion_matrix(self.current_checkpoint_dir, accumulated_confusion_matrix_stem_val, normalize=False, class_names=['stem', 'no_stem'], filename=self.current_checkpoint_name+'_stem_val.png')
+        plot_confusion_matrix(self.current_checkpoint_dir,
+                              accumulated_confusion_matrix_val,
+                              normalize=False,
+                              filename=self.current_checkpoint_name+'_val.png')
+
+        plot_confusion_matrix(self.current_checkpoint_dir,
+                              accumulated_confusion_matrix_stem_val,
+                              normalize=False,
+                              class_names=['stem', 'no_stem'],
+                              filename=self.current_checkpoint_name+'_stem_val.png')
 
         # calculate metrics on accumulated confusion matrix
         metrics_val = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_val)
@@ -408,12 +514,21 @@ class Trainer:
         # NOTE we do not have a valid number of false negatives for stem detection, so some metrics computed here will not be valid
         metrics_stem_val = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_stem_val)
 
-        print("Calculate metrics of split 'val'.")
-        write_metrics_to_file(self.current_checkpoint_dir, metrics_val, filename=self.current_checkpoint_name+'_val.yaml')
-        write_metrics_to_file(self.current_checkpoint_dir, metrics_stem_val, class_names=['stem', 'no_stem'], filename=self.current_checkpoint_name+'_stem_val.yaml')
-
         mean_accuracy = np.mean(np.asarray(metrics_val['accuracy'])[1:]) # without background
         mean_iou = np.mean(np.asarray(metrics_val['iou'])[1:]) # without background
+
+        print("Write metrics of split 'val' to tensorboard log.")
+        self.summary_writer.add_scalar('iou_background/val', metrics_val['iou'][0], global_step=self.current_checkpoint_index)
+        self.summary_writer.add_scalar('iou_weed/val', metrics_val['iou'][1], global_step=self.current_checkpoint_index)
+        self.summary_writer.add_scalar('iou_sugar_beet/val', metrics_val['iou'][2], global_step=self.current_checkpoint_index)
+        self.summary_writer.add_scalar('mean_iou/val', metrics_val['iou'][2], global_step=self.current_checkpoint_index)
+
+        print("Write metrics of split 'val' to yaml.")
+        self.write_metrics_to_file(self.current_checkpoint_dir,
+                                   metrics_val, filename=self.current_checkpoint_name+'_val.yaml')
+        self.write_metrics_to_file(self.current_checkpoint_dir,
+                                   metrics_stem_val, class_names=['stem', 'no_stem'],
+                                   filename=self.current_checkpoint_name+'_stem_val.yaml')
 
         print('  Mean IoU (without background): {:.04f}'.format(mean_iou))
         print("  IoU 'background': {:.04f}".format(metrics_val['iou'][0]))
@@ -423,8 +538,10 @@ class Trainer:
         print("  Accuracy 'background': {:.04f}".format(metrics_val['accuracy'][0]))
         print("  Accuracy 'weed': {:.04f}".format(metrics_val['accuracy'][1]))
         print("  Accuracy 'sugar beet': {:.04f}".format(metrics_val['accuracy'][2]))
-        print("  Accuracy stem detection with {:.01f} px tolerance: {:.04f}".format(self.tolerance_radius, metrics_stem_val['accuracy'][0]))
-        print("  Mean deviation stems within {:.01f} px tolerance: {:.04f} px".format(self.tolerance_radius, accumulated_deviation_val/(accumulated_confusion_matrix_stem_val[0, 0]+1e-6)))
+        print("  Accuracy stem detection with {:.01f} px tolerance: {:.04f}".format(
+            self.tolerance_radius, metrics_stem_val['accuracy'][0]))
+        print("  Mean deviation stems within {:.01f} px tolerance: {:.04f} px".format(
+            self.tolerance_radius, accumulated_deviation_val/(accumulated_confusion_matrix_stem_val[0, 0]+1e-6)))
 
 
     def make_plots(self, path, input_slice, semantic_output, stem_keypoint_output, stem_offset_output, stem_position_output, stem_position_target, test_run):
