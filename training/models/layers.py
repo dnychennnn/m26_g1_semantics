@@ -2,8 +2,7 @@
 
 Author: Jan Quakernack
 
-Note: This module contains parts, which were written for other student projects
-conducted by the author.
+Note: Adapted from code originally written for MGE-MSR-P-S.
 """
 
 import torch
@@ -46,25 +45,4 @@ class ConvBlock(nn.Sequential):
 
       if dropout_rate is not None and dropout_rate>0.0:
           self.add_module('dropout', nn.Dropout2d(dropout_rate))
-
-
-class ConvSequence(nn.Sequential):
-    def __init__(self,
-                 input_channels,
-                 output_channels,
-                 num_conv_blocks,
-                 activation,
-                 dropout_rate):
-      super().__init__()
-
-      for index in range(num_conv_blocks):
-          self.add_module('conv_{}'.format(index),
-                          ConvBlock(input_channels=input_channels,
-                                    output_channels=output_channels,
-                                    kernel_size=3,
-                                    stride=1,
-                                    padding=1,
-                                    dropout_rate=dropout_rate,
-                                    activation=activation))
-          input_channels=output_channels
 

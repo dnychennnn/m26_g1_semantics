@@ -13,8 +13,6 @@ from pathlib import Path
 import torch
 from torch import nn
 
-from training.models.FCN import FCN
-from training.models.simple_unet import SimpleUnet
 from training import MODELS_DIR, CUDA_DEVICE_NAME, load_config
 from training.models.layers import ConvBlock
 from training.models.hardnet import HarDNet
