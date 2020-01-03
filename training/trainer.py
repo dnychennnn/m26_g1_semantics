@@ -425,13 +425,8 @@ class Trainer:
             stem_keypoint_target_batch = stem_keypoint_target_batch.to(self.device)
             stem_offset_target_batch = stem_offset_target_batch.to(self.device)
 
-            # convert stem_position_target_batch into a list of position per batch
-            # TODO move this to a function
-            stem_position_target_list = []
-            batch_size = stem_position_target_batch.shape[0]
-            for index_in_batch in range(batch_size):
-                stem_count_target = stem_count_target_batch[index_in_batch]
-                stem_position_target_list.append(stem_position_target_batch[index_in_batch, :stem_count_target])
+            stem_position_target_list = self.stem_positions_to_list(stem_position_target_batch,
+                                                                    stem_count_target_batch)
 
             if test_run:
                 image_false_color = vis.tensor_to_false_color(input_batch[0, :3], input_batch[0, 3],
@@ -542,6 +537,17 @@ class Trainer:
             self.tolerance_radius, metrics_stem_val['accuracy'][0]))
         print("  Mean deviation stems within {:.01f} px tolerance: {:.04f} px".format(
             self.tolerance_radius, accumulated_deviation_val/(accumulated_confusion_matrix_stem_val[0, 0]+1e-6)))
+
+
+    def stem_positions_to_list(self, stem_position_target_batch, stem_count_target_batch):
+        """Convert stem positions tensor into a list of position per batch.
+        """
+        stem_position_target_list = []
+        batch_size = stem_position_target_batch.shape[0]
+        for index_in_batch in range(batch_size):
+            stem_count_target = stem_count_target_batch[index_in_batch]
+            stem_position_target_list.append(stem_position_target_batch[index_in_batch, :stem_count_target])
+        return stem_position_target_list
 
 
     def make_plots(self, path, input_slice, semantic_output, stem_keypoint_output, stem_offset_output, stem_position_output, stem_position_target, test_run):
