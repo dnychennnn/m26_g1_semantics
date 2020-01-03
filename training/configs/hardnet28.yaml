@@ -1,7 +1,7 @@
 architecture_name: 'hardnet28'
 path_to_weights_file: ''
 
-batch_size: 4
+batch_size: 2
 input_channels: 4
 input_height: 322
 input_width: 432
@@ -13,7 +13,13 @@ initial_conv_output_channels: 32
 initial_conv_stride: 1
 initial_conv_kernel_size: 3
 
-feature_channels: 64
+# 'shared': same decoder for semantic and stem features
+# 'separate': two different decoders
+decoder_option: 'separate'
+
+# only allowed to be different if decoder_option is 'separate'
+semantic_feature_channels: 64
+stem_feature_channels: 64
 
 # hardnet backbone specific
 num_conv_blocks_per_stage: [4, 8]

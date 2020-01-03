@@ -7,7 +7,7 @@ num_epochs: 500
 semantic_loss_weight: 10.0
 stem_loss_weight: 1.0
 stem_classification_loss_weight: 1.0
-stem_regression_loss_weight: 10.0
+stem_regression_loss_weight: 1.0
 
 # class weights for semantic segmentation
 weight_background: 1.0

@@ -119,8 +119,10 @@ class Model(nn.Module):
                  output_channels_per_stage,
                  do_downsampling_per_stage,
                  provide_as_output_per_stage,
-                 feature_channels,
+                 semantic_feature_channels,
+                 stem_feature_channels,
                  encoder,
+                 decoder_option,
                  **extra_arguments):
         super().__init__()
 
@@ -134,70 +136,46 @@ class Model(nn.Module):
 
         self.encoder = encoder
 
-        # init upsampling modules and 1x1 convolutions for lateral connections
+        # decoders
 
-        output_sizes = self.infer_encoder_output_sizes_(input_height,
-                                                        input_width,
-                                                        initial_conv_stride,
-                                                        do_downsampling_per_stage,
-                                                        provide_as_output_per_stage)
+        encoder_output_sizes = self.infer_encoder_output_sizes_(input_height,
+                                                                input_width,
+                                                                initial_conv_stride,
+                                                                do_downsampling_per_stage,
+                                                                provide_as_output_per_stage)
 
-        upsampling_modules = []
-        for size_index, output_size in enumerate(output_sizes[:-1]):
-            upsampling_modules.append(nn.Upsample(size=output_size, mode='nearest'))
+        encoder_output_channels = [output_channels_per_stage[index]
+                                   for index in range(len(output_channels_per_stage))
+                                   if provide_as_output_per_stage[index]]
 
-            # upsampling_module = torch.nn.Sequential()
+        if decoder_option=='shared':
+            if semantic_feature_channels!=stem_feature_channels:
+                raise ValueError("Different number of features. Please set decoder_option to 'separate'.")
 
-            # # use transpose convolution instead of nearest/bilinear upsamling to avoid onnx version conflicts
-            # upsampling_module.add_module('deconv', torch.nn.ConvTranspose2d(in_channels=feature_channels,
-                                                                            # out_channels=feature_channels,
-                                                                            # kernel_size=2,
-                                                                            # stride=2,
-                                                                            # padding=1))
+            # same decoder for semantic and stem features
+            decoder = Decoder(encoder_output_channels, encoder_output_sizes, semantic_feature_channels)
 
-            # # zero padding to get size right
-            # input_height, input_width = output_sizes[size_index+1]
-            # output_height, output_width = output_size
+            self.semantic_decoder = decoder
+            self.stem_decoder = decoder
 
-            # padding_x = output_width-(input_width-1)*2
-            # padding_y = output_height-(input_height-1)*2
-            # padding_right = padding_x//2
-            # padding_left = padding_x-padding_right
-            # padding_bottom = padding_y//2
-            # padding_top = padding_y-padding_bottom
+        elif decoder_option=='separate':
+            # two different decoders
 
-            # # debug output
-            # # print(padding_left, padding_right, padding_top, padding_bottom)
+            self.semantic_decoder = Decoder(encoder_output_channels, encoder_output_sizes, semantic_feature_channels)
+            self.stem_decoder = Decoder(encoder_output_channels, encoder_output_sizes, stem_feature_channels)
+        else:
+            raise ValueError("Decoder option '{}' not recognized.".format(decoder_option))
 
-            # upsampling_module.add_module('zero_padding', nn.ZeroPad2d((padding_left, padding_right, padding_top, padding_bottom)))
-            # upsampling_modules.append(upsampling_module)
-
-        self.upsampling_modules = nn.ModuleList(upsampling_modules[::-1])
-
-        convs_for_lateral_connections = []
-        for (output_channels,
-            provide_as_output,) in zip(output_channels_per_stage[::-1],
-                                       provide_as_output_per_stage[::-1]):
-
-            if provide_as_output:
-                convs_for_lateral_connections.append(nn.Conv2d(in_channels=output_channels,
-                                                               out_channels=feature_channels,
-                                                               kernel_size=1,
-                                                               stride=1,
-                                                               padding=0,
-                                                               bias=True))
-
-        self.convs_for_lateral_connections = nn.ModuleList(convs_for_lateral_connections)
 
         # network heads
 
-        self.semantic_head = Head(input_channels=feature_channels,
+        self.semantic_head = Head(input_channels=semantic_feature_channels,
                                   output_channels=3) # three classes: background, weed, sugar_beet
 
-        self.stem_keypoint_head = Head(input_channels=feature_channels,
+        self.stem_keypoint_head = Head(input_channels=stem_feature_channels,
                                        output_channels=1) # one output: keypoint confidence
 
-        self.stem_offset_head = Head(input_channels=feature_channels,
+        self.stem_offset_head = Head(input_channels=stem_feature_channels,
                                      output_channels=2) # two output: keypoint offsets
 
         # softmax of logits of semantic output, applied in eval mode only
@@ -246,6 +224,84 @@ class Model(nn.Module):
 
         # pass through decoder
 
+        semantic_features = self.semantic_decoder(encoder_outputs)
+        stem_features = self.stem_decoder(encoder_outputs)
+
+        # pass through heads
+
+        semantic_output = self.semantic_head(semantic_features)
+
+        # debug output
+        # print(semantic_output.shape)
+
+        if not self.training:
+          # we are in evaluation mode
+          # apply softmax to logits of semantic output
+          semantic_output = self.softmax_semantic(semantic_output)
+
+        stem_keypoint_output = self.stem_keypoint_head(stem_features)
+
+        # debug output
+        # print(stem_keypoint_output.shape)
+
+        if not self.training:
+          # we are in evaluation mode
+          # apply sigmoid to logits of stem keypoint output
+          stem_keypoint_output = self.sigmoid_stem_keypoint(stem_keypoint_output)
+
+        stem_offset_output = self.stem_offset_head(stem_features)
+
+        # debug output
+        # print(stem_offset_output.shape)
+
+        return semantic_output, stem_keypoint_output, stem_offset_output
+
+
+class Decoder(nn.Module):
+
+    def __init__(self,
+                 encoder_output_channels,
+                 encoder_output_sizes,
+                 feature_channels):
+        super().__init__()
+
+        # init upsampling modules and 1x1 convolutions for lateral connections
+
+        convs_for_lateral_connections = []
+
+        encoder_output_channels = encoder_output_channels[::-1] # pyramid top first
+
+        for output_index, output_channels in enumerate(encoder_output_channels):
+            # print(output_channels)
+            input_channels = output_channels
+
+            if output_index!=0:
+                # we have fatures from a hight pyramid level
+                input_channels += feature_channels
+
+            convs_for_lateral_connections.append(nn.Conv2d(in_channels=input_channels,
+                                                           out_channels=feature_channels,
+                                                           kernel_size=1,
+                                                           stride=1,
+                                                           padding=0,
+                                                           bias=True))
+
+        self.convs_for_lateral_connections = nn.ModuleList(convs_for_lateral_connections)
+
+
+        upsampling_modules = []
+
+        encoder_output_sizes = encoder_output_sizes[::-1] # pyramid top first
+
+        for output_size in encoder_output_sizes[1:]:
+            # print(output_size)
+            upsampling_modules.append(nn.Upsample(size=output_size, mode='nearest'))
+
+        self.upsampling_modules = nn.ModuleList(upsampling_modules)
+
+
+    def forward(self, encoder_outputs):
+
         encoder_outputs = encoder_outputs[::-1] # pyramid top first
 
         # apply 1x1 convolution to top stage to get number of feature channels right
@@ -257,46 +313,15 @@ class Model(nn.Module):
                            conv,) in enumerate(zip(encoder_outputs[1:],
                                                self.upsampling_modules,
                                                self.convs_for_lateral_connections[1:])):
-            # debug output
-            # print('x before upsampling', x.shape)
 
             x = upsampling_module(x)
-            y = conv(encoder_output)
 
-            # debug output
-            # print('x after upsampling', x.shape)
-            # print('y', y.shape)
+            # note we use concatenation instead of summation here
+            x = torch.cat([x, encoder_output], dim=1)
 
-            x += y
+            x = conv(x)
 
-        # pass through heads
-
-        semantic_output = self.semantic_head(x)
-
-        # debug output
-        # print(semantic_output.shape)
-
-        if not self.training:
-          # we are in evaluation mode
-          # apply softmax to logits of semantic output
-          semantic_output = self.softmax_semantic(semantic_output)
-
-        stem_keypoint_output = self.stem_keypoint_head(x)
-
-        # debug output
-        # print(stem_keypoint_output.shape)
-
-        if not self.training:
-          # we are in evaluation mode
-          # apply sigmoid to logits of stem keypoint output
-          stem_keypoint_output = self.sigmoid_stem_keypoint(stem_keypoint_output)
-
-        stem_offset_output = self.stem_offset_head(x)
-
-        # debug output
-        # print(stem_offset_output.shape)
-
-        return semantic_output, stem_keypoint_output, stem_offset_output
+        return x
 
 
 class Head(nn.Sequential):
@@ -334,3 +359,31 @@ class Head(nn.Sequential):
                                   padding=0,
                                   dropout_rate=None,
                                   activation=None))
+
+
+# upsampling_module = torch.nn.Sequential()
+
+# # use transpose convolution instead of nearest/bilinear upsamling to avoid onnx version conflicts
+# upsampling_module.add_module('deconv', torch.nn.ConvTranspose2d(in_channels=feature_channels,
+                                                                # out_channels=feature_channels,
+                                                                # kernel_size=2,
+                                                                # stride=2,
+                                                                # padding=1))
+
+# # zero padding to get size right
+# input_height, input_width = output_sizes[size_index+1]
+# output_height, output_width = output_size
+
+# padding_x = output_width-(input_width-1)*2
+# padding_y = output_height-(input_height-1)*2
+# padding_right = padding_x//2
+# padding_left = padding_x-padding_right
+# padding_bottom = padding_y//2
+# padding_top = padding_y-padding_bottom
+
+# # debug output
+# # print(padding_left, padding_right, padding_top, padding_bottom)
+
+# upsampling_module.add_module('zero_padding', nn.ZeroPad2d((padding_left, padding_right, padding_top, padding_bottom)))
+# upsampling_modules.append(upsampling_module)
+

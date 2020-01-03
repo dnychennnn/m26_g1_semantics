@@ -13,7 +13,13 @@ initial_conv_output_channels: 32
 initial_conv_stride: 1
 initial_conv_kernel_size: 3
 
-feature_channels: 64
+# 'shared': same decoder for semantic and stem features
+# 'separate': two different decoders
+decoder_option: 'separate'
+
+# only allowed to be different if decoder_option is 'separate'
+semantic_feature_channels: 64
+stem_feature_channels: 64
 
 # hardnet backbone specific
 num_conv_blocks_per_stage: [4, 8]
