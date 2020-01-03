@@ -15,9 +15,10 @@ from torch import nn
 
 from training.models.FCN import FCN
 from training.models.simple_unet import SimpleUnet
-from training.models.hardnet import HarDNet
 from training import MODELS_DIR, CUDA_DEVICE_NAME, load_config
 from training.models.layers import ConvBlock
+from training.models.hardnet import HarDNet
+from training.models.densenet import DenseNet
 
 class Model(nn.Module):
 
@@ -30,15 +31,17 @@ class Model(nn.Module):
             phase (str): 'training' or 'deployment'
             verbose (bool): Print some information.
         """
-        if architecture_name=='hardnet29':
+        if 'hardnet' in architecture_name:
             encoder = HarDNet.from_config(architecture_name, phase)
-
             model_config = load_config(architecture_name+'.yaml')
-
             model_parameters = {**model_config}
-
             model_parameters['encoder'] = encoder
-
+            model = Model(**model_parameters)
+        elif 'densenet' in architecture_name:
+            encoder = DenseNet.from_config(architecture_name, phase)
+            model_config = load_config(architecture_name+'.yaml')
+            model_parameters = {**model_config}
+            model_parameters['encoder'] = encoder
             model = Model(**model_parameters)
         else:
             raise ValueError("Architechture '{}' is not supported.".format(architecture_name))

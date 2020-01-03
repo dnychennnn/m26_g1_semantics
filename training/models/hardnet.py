@@ -1,5 +1,4 @@
-"""
-An encoder network using harmonic densely connected blocks proposed to reduce memory traffic.
+"""Encoder backbone using harmonic densely connected blocks proposed to reduce memory traffic.
 
 Reference: https://github.com/PingoLH/Pytorch-HarDNet
 
@@ -13,7 +12,6 @@ import numpy as np
 import math
 
 from training import CONFIGS_DIR, load_config
-from training.models.layers import ConvBlock, ConvSequence
 
 
 class HarDNet(nn.Module):
@@ -62,7 +60,7 @@ class HarDNet(nn.Module):
                                       provide_as_output_per_stage):
 
             # debug output
-            print('hardnet stage in, out', block_input_channels, output_channels)
+            # print('hardnet stage in, out', block_input_channels, output_channels)
 
             hard_block = HarDBlock(input_channels=block_input_channels,
                                    num_conv_blocks=num_conv_blocks,
@@ -76,7 +74,7 @@ class HarDNet(nn.Module):
             self.is_output_module.append(False)
 
             # debug output
-            print('hardblock out', hard_block.get_output_channels())
+            # print('hardblock out', hard_block.get_output_channels())
 
             # transitional 1x1 convolution to get desired number of output channels
 
@@ -84,7 +82,7 @@ class HarDNet(nn.Module):
                                              output_channels=output_channels,
                                              kernel_size=1,
                                              padding=0,
-                                             activation='leaky_relu',
+                                             activation=None, # no activation here, different from the reference
                                              dropout_rate=None)
 
             module_list.append(transition_block)
@@ -294,60 +292,59 @@ class HarDCombinedConvBlock(nn.Sequential):
 
 
 class HarDConvBlock(nn.Sequential):
-  def __init__(self,
-               input_channels,
-               output_channels,
-               kernel_size,
-               padding,
-               activation,
-               dropout_rate):
-      super().__init__()
-      self.add_module('conv', nn.Conv2d(input_channels,
-                                        out_channels=output_channels,
-                                        kernel_size=kernel_size,
-                                        stride=1,
-                                        padding=padding,
-                                        bias=False))
-      self.add_module('batch_norm', nn.BatchNorm2d(output_channels))
+    def __init__(self,
+                 input_channels,
+                 output_channels,
+                 kernel_size,
+                 padding,
+                 activation,
+                 dropout_rate):
+        super().__init__()
+        self.add_module('conv', nn.Conv2d(input_channels,
+                                          out_channels=output_channels,
+                                          kernel_size=kernel_size,
+                                          stride=1,
+                                          padding=padding,
+                                          bias=False))
+        self.add_module('batch_norm', nn.BatchNorm2d(output_channels))
 
-      if activation=='relu':
-          self.add_module('relu', nn.ReLU())
-      elif activation=='leaky_relu':
-          self.add_module('leaky_relu', nn.LeakyReLU())
-      elif activation=='sigmoid':
-          self.add_module('sigmoid', nn.Sigmoid())
-      elif activation=='tanh':
-          self.add_module('tanh', nn.Tanh())
-      elif activation=='softmax':
-          self.add_module('softmax', nn.Softmax(dim=1))
-      elif activation is None or activation=='none':
-          pass
-      else:
-          warnings.warn("Convolutional block with not-supported activation '{}'.".format(activation))
+        if activation=='relu':
+            self.add_module('relu', nn.ReLU())
+        elif activation=='leaky_relu':
+            self.add_module('leaky_relu', nn.LeakyReLU())
+        elif activation=='sigmoid':
+            self.add_module('sigmoid', nn.Sigmoid())
+        elif activation=='tanh':
+            self.add_module('tanh', nn.Tanh())
+        elif activation=='softmax':
+            self.add_module('softmax', nn.Softmax(dim=1))
+        elif activation is None or activation=='none':
+            pass
+        else:
+            warnings.warn("Convolutional block with not-supported activation '{}'.".format(activation))
 
-      if dropout_rate is not None and dropout_rate>0.0:
-          self.add_module('dropout', nn.Dropout2d(dropout_rate))
+        if dropout_rate is not None and dropout_rate>0.0:
+            self.add_module('dropout', nn.Dropout2d(dropout_rate))
 
 
 class HarDDepthWiseConvBlock(nn.Sequential):
+    def __init__(self,
+                 input_channels,
+                 output_channels,
+                 stride):
+        super().__init__()
 
-  def __init__(self,
-               input_channels,
-               output_channels,
-               stride):
-      super().__init__()
+        self.add_module('depth_wise_conv',
+                        nn.Conv2d(input_channels,
+                                  out_channels=output_channels,
+                                  kernel_size=3,
+                                  stride=stride,
+                                  padding=1,
+                                  groups=output_channels,
+                                  bias=False))
 
-      self.add_module('depth_wise_conv',
-                      nn.Conv2d(input_channels,
-                                out_channels=output_channels,
-                                kernel_size=3,
-                                stride=stride,
-                                padding=1,
-                                groups=output_channels,
-                                bias=False))
+        self.add_module('batch_norm',
+                        nn.BatchNorm2d(output_channels))
 
-      self.add_module('batch_norm',
-                      nn.BatchNorm2d(output_channels))
-
-      # note there is no activation applied here
+        # note there is no activation applied here
 

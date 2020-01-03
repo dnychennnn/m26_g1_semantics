@@ -8,7 +8,7 @@ from training.trainer import Trainer
 
 
 @click.command()
-@click.argument('architecture-name', type=str, default='hardnet29')
+@click.argument('architecture-name', type=str, default='hardnet56')
 @click.option('--test-run/--no-test-run', default=False)
 @click.option('--only-eval/--no-only-eval', default=False)
 @click.option('--overfit/--no-overfit', default=False)

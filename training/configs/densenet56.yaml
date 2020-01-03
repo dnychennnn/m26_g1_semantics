@@ -1,7 +1,7 @@
-architecture_name: 'hardnet29'
-path_to_weights_file: 'hardnet29.pth'
+architecture_name: 'densenet53'
+path_to_weights_file: ''
 
-batch_size: 4
+batch_size: 2
 input_channels: 4
 input_height: 322
 input_width: 432
@@ -22,4 +22,4 @@ growth_rate_per_stage: [16, 16, 32, 128]
 do_downsampling_per_stage: [True, True, True, False]
 provide_as_output_per_stage: [True, True, True, True]
 channels_weighting_factor: 1.6
-dropout_rate: 0.05
+dropout_rate: 0.2
