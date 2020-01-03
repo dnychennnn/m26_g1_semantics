@@ -172,7 +172,7 @@ void TensorrtNetwork::Load(const std::string& kFilepath, const bool kForceRebuil
 
     builder->setMaxBatchSize(1);
     auto config = builder->createBuilderConfig();
-    // config->setMaxWorkspaceSize(1<<20); // maximum amount of GPU memory we allow the engine to use
+    config->setMaxWorkspaceSize(1<<20);
 
     if(this->engine_){this->engine_->destroy();}
     this->engine_ = builder->buildEngineWithConfig(*network, *config);

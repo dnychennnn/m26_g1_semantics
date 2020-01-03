@@ -56,7 +56,7 @@ def export_model(architecture_name, path_to_output_file, device, file_type):
                           input_names=['input'],
                           output_names=['semantic_output', 'stem_keypoint_output', 'stem_offset_output'],
                           verbose=False,
-                          opset_version=9)
+                          opset_version=7) # maximum opset version supported by tensorrt
     elif file_type=='pt':
         traced_script_module = torch.jit.trace(model, dummy_input)
         traced_script_module.save(str(path_to_output_file))
