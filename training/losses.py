@@ -23,7 +23,14 @@ class StemClassificationLoss(nn.Module):
 
 
     def forward(self, stem_keypoint_output_batch, stem_keypoint_target_batch):
-        return self.criterion(stem_keypoint_output_batch, stem_keypoint_target_batch)
+        loss = self.criterion(stem_keypoint_output_batch, stem_keypoint_target_batch)
+
+        if torch.isnan(loss):
+            print('Stem classification loss: Nan encountered.')
+            return torch.tensor(0.0, device=loss.device)
+
+        return loss
+
 
 
 class StemRegressionLoss(nn.Module):
@@ -64,5 +71,11 @@ class StemRegressionLoss(nn.Module):
         # print(torch.min(masked_offset_target))
         # print(torch.max(masked_offset_target))
 
-        return self.criterion(masked_offset_output, masked_offset_target)
+        loss = self.criterion(masked_offset_output, masked_offset_target)
+
+        if torch.isnan(loss):
+            print('Stem regression loss: Nan encountered.')
+            return torch.tensor(0.0, device=loss.device)
+
+        return loss
 

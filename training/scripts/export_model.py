@@ -11,23 +11,22 @@ from training import MODELS_DIR, CUDA_DEVICE_NAME, load_config
 
 
 @click.command()
-@click.argument('architecture_name', type=str, default='simple_unet')
-@click.argument('path_to_weights_file', type=click.Path(dir_okay=False, file_okay=True), default='simple_unet.pth')
+@click.argument('architecture_name', type=str, default='hardnet56')
 @click.option('-o', '--path-to-output-file', type=click.Path(dir_okay=False, file_okay=True), default=None)
 @click.option('-d', '--device', type=str, default=CUDA_DEVICE_NAME)
 @click.option('-t', '--file-type', type=str, default='onnx')
-def export_model(architecture_name, path_to_weights_file, path_to_output_file, device, file_type):
+def export_model(architecture_name, path_to_output_file, device, file_type):
     assert file_type in ['onnx', 'pt']
     print('Exporting model as .{}.'.format(file_type))
 
     try:
-        model = Model.by_name(architecture_name, phase='deployment', path_to_weights_file=path_to_weights_file, verbose=True)
+        model = Model.by_name(architecture_name, phase='deployment', verbose=True)
     except ValueError:
         click.echo("Architechture '{}' is not supported.".format(architecture_name), err=True)
 
     if path_to_output_file is None:
-        # name similar to .pth file
-        path_to_output_file = Path(path_to_weights_file).stem+'.'+file_type
+        # name similar to architecture_name
+        path_to_output_file = architecture_name+'.'+file_type
 
     path_to_output_file = Path(path_to_output_file)
     if not path_to_output_file.is_absolute():
@@ -56,7 +55,8 @@ def export_model(architecture_name, path_to_weights_file, path_to_output_file, d
                           training=False,
                           input_names=['input'],
                           output_names=['semantic_output', 'stem_keypoint_output', 'stem_offset_output'],
-                          verbose=False)
+                          verbose=False,
+                          opset_version=7) # maximum opset version supported by tensorrt
     elif file_type=='pt':
         traced_script_module = torch.jit.trace(model, dummy_input)
         traced_script_module.save(str(path_to_output_file))

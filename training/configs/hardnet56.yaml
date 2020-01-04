@@ -1,0 +1,31 @@
+architecture_name: 'hardnet56'
+path_to_weights_file: 'hardnet56.pth'
+
+batch_size: 2
+input_channels: 4
+input_height: 322
+input_width: 432
+
+target_height: 322
+target_width: 432
+
+initial_conv_output_channels: 32
+initial_conv_stride: 1
+initial_conv_kernel_size: 3
+
+# 'shared': same decoder for semantic and stem features
+# 'separate': two different decoders
+decoder_option: 'separate'
+
+# only allowed to be different if decoder_option is 'separate'
+semantic_feature_channels: 64
+stem_feature_channels: 64
+
+# hardnet backbone specific
+num_conv_blocks_per_stage: [4, 8, 8, 4]
+output_channels_per_stage: [64, 128, 256, 512]
+growth_rate_per_stage: [16, 16, 32, 128]
+do_downsampling_per_stage: [True, True, True, False]
+provide_as_output_per_stage: [True, True, True, True]
+channels_weighting_factor: 1.6
+dropout_rate: 0.05

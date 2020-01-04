@@ -28,7 +28,7 @@ int main() {
   auto network = igg::PytorchNetwork();
 
   // load pt file
-  const auto model_path = igg::Network::ModelsDir()/"simple_unet.pt";
+  const auto model_path = igg::Network::ModelsDir()/"hardnet56.pt";
   network.Load(model_path.string(), false);
 
   // check network status
