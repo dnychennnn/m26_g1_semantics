@@ -1,7 +1,7 @@
-architecture_name: 'densenet53'
-path_to_weights_file: ''
+architecture_name: 'densenet56'
+path_to_weights_file: 'densenet56.pth'
 
-batch_size: 2
+batch_size: 1
 input_channels: 4
 input_height: 322
 input_width: 432

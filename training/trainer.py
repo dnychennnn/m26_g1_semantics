@@ -168,10 +168,11 @@ class Trainer:
             self.log_dir = LOGS_DIR/self.run_name
 
             # checkpoint dir same as logs dir as there is only one checkpint
+            self.current_checkpoint_index = 0
             self.current_checkpoint_dir = self.log_dir/self.run_name
             self.current_checkpoint_name = self.current_checkpoint_dir.name
             if not self.current_checkpoint_dir.exists():
-                self.current_checkpoint_dir.mkdir()
+                self.current_checkpoint_dir.mkdir(parents=True)
 
             # init tensorboard summary writer
             self.summary_writer = SummaryWriter(str(self.log_dir))
@@ -352,7 +353,7 @@ class Trainer:
         torch.save(self.model.state_dict(), str(weights_path))
 
         # average and save train losses
-        losses_train_norm = len(self.data_loader_train)
+        losses_train_norm = len(self.data_loader_train)+1e-6
         losses_train = {key: value/losses_train_norm for key, value in accumulated_losses_train.items()}
 
         print('Write average losses to tensorboard log.')
@@ -476,7 +477,7 @@ class Trainer:
 
         # average and save val losses
 
-        losses_val_norm = len(self.data_loader_val)
+        losses_val_norm = len(self.data_loader_val)+1e-6
         losses_val = {key: value/losses_val_norm for key, value in accumulated_losses_val.items()}
 
         print("Write average losses of 'val' split to tensorboard log.")

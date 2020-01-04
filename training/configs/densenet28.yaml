@@ -1,5 +1,5 @@
 architecture_name: 'densenet28'
-path_to_weights_file: ''
+path_to_weights_file: 'densenet28.pth'
 
 batch_size: 2
 input_channels: 4
