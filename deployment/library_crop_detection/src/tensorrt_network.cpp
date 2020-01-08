@@ -16,6 +16,8 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 
+#include <time.h>
+
 #ifdef TENSORRT_AVAILABLE
 #include <cuda_runtime_api.h>
 #include <NvOnnxParser.h>
@@ -94,9 +96,24 @@ void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, con
                           4*this->input_width_*this->input_height_*this->input_channels_,
                           cudaMemcpyHostToDevice));
 
+  #ifdef DEBUG_MODE
+  // stop watch code provided by Marcell Missura
+  struct timespec last;
+  clock_gettime(CLOCK_MONOTONIC, &last);
+  #endif // DEBUG_MODE
+
   // pass through network
   context->executeV2(&((this->device_buffers_)[this->input_binding_index_])); // version 2 is without batch size
   HANDLE_ERROR(cudaDeviceSynchronize());
+
+  #ifdef DEBUG_MODE
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  long diff_in_secs = now.tv_sec - last.tv_sec;
+  long diff_in_nanos = now.tv_nsec - last.tv_nsec;
+  double time = (double)diff_in_secs + (double)diff_in_nanos/1000000000;
+  std::cout << "Network inference time: " << time << "s (" << 1.0/time << "fps)\n";
+  #endif // DEBUG_MODE
 
   // transfer back to host
 
