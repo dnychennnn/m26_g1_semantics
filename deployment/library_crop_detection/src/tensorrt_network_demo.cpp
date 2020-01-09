@@ -29,7 +29,7 @@ int main() {
   igg::TensorrtNetwork network(kParameters);
 
   // load onnx file or use serialized engine if available
-  const auto model_path = igg::Network::ModelsDir()/"densenet56.onnx";
+  const auto model_path = igg::Network::ModelsDir()/"hardnet56.onnx";
   std::cout << "Load model file: " << model_path << "\n";
   network.Load(model_path.string(), false);
 

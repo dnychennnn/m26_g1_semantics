@@ -33,7 +33,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED)
+find_package(catkin REQUIRED rosconsole)
 
 ## Find non-ROS dependencies
 
@@ -228,10 +228,15 @@ add_library(${PROJECT_NAME}
   src/opencv_stem_inference.cpp
 )
 
+add_library(stop_watch
+  src/stop_watch.cpp
+)
+
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}
   ${OpenCV_LIBS}
   Boost::filesystem
+  stop_watch
 )
 
 if(TENSORRT_AVAILABLE)

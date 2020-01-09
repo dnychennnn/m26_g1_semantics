@@ -7,6 +7,12 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 
+#ifdef DEBUG_MODE
+#include <ros/console.h>
+#include "stop_watch.hpp"
+#endif // DEBUG_MODE
+
+
 namespace igg {
 
 
@@ -35,6 +41,11 @@ OpencvStemInference::OpencvStemInference():
 
 
 void OpencvStemInference::Infer(NetworkInference* inference) const {
+  #ifdef DEBUG_MODE
+  // measure extraction time in debug mode
+  StopWatch stop_watch;
+  #endif // DEBUG_MODE
+
   cv::Mat stem_keypoint_confidence = inference->StemKeypointConfidence();
   if(stem_keypoint_confidence.empty()) {
     throw std::runtime_error("Stem keypoint confidences not available.");
@@ -49,6 +60,10 @@ void OpencvStemInference::Infer(NetworkInference* inference) const {
   if(offset_y.empty()) {
     throw std::runtime_error("Stem offset y not available.");
   }
+
+  #ifdef DEBUG_MODE
+  stop_watch.Start();
+  #endif // DEBUG_MODE
 
   cv::Mat votes = cv::Mat::zeros(stem_keypoint_confidence.rows,
       stem_keypoint_confidence.cols, CV_32FC1);
@@ -91,6 +106,11 @@ void OpencvStemInference::Infer(NetworkInference* inference) const {
   }
 
   inference->SetStemPositions(std::move(stem_positions));
+
+  #ifdef DEBUG_MODE
+  double extraction_time = stop_watch.ElapsedTime();
+  ROS_INFO("Stem extraction time: %f ms (%f fps)", 1000.0*extraction_time, 1.0/extraction_time);
+  #endif // DEBUG_MODE
 }
 
 } // namespace igg

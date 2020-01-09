@@ -16,13 +16,16 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 
-#include <time.h>
-
 #ifdef TENSORRT_AVAILABLE
 #include <cuda_runtime_api.h>
 #include <NvOnnxParser.h>
 #include <NvInferRuntime.h>
 #endif // TENSORRT_AVAILABLE
+
+#ifdef DEBUG_MODE
+#include <ros/console.h>
+#include "stop_watch.hpp"
+#endif // DEBUG_MODE
 
 #include "handle_cuda_error.hpp"
 
@@ -57,6 +60,11 @@ void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, con
   ASSERT_TENSORRT_AVAILABLE;
   #ifdef TENSORRT_AVAILABLE
 
+  #ifdef DEBUG_MODE
+  // measure inference time in debug mode
+  StopWatch stop_watch;
+  #endif // DEBUG_MODE
+
   if (!this->engine_) {
     throw std::runtime_error("No engine loaded.");
   }
@@ -66,6 +74,10 @@ void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, con
     throw std::runtime_error("Could not create execution context.");
   }
 
+  #ifdef DEBUG_MODE
+  stop_watch.Start();
+  #endif // DEBUG_MODE
+
   // resize input image to network input size
   cv::Mat input;
   cv::resize(kImage, input, cv::Size(this->input_width_, this->input_height_));
@@ -73,6 +85,15 @@ void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, con
   // return resized image as well
   std::memcpy(result->ServeInputImageBuffer(this->input_width_, this->input_height_),
       input.ptr(), 4*this->input_width_*this->input_height_);
+
+  #ifdef DEBUG_MODE
+  double scale_time = stop_watch.ElapsedTime();
+  ROS_INFO("Scale network input: %f ms (%f fps)", 1000.0*scale_time, 1.0/scale_time);
+  #endif // DEBUG_MODE
+
+  #ifdef DEBUG_MODE
+  stop_watch.Start();
+  #endif // DEBUG_MODE
 
   // to float
   input.convertTo(input, CV_32F);
@@ -88,6 +109,15 @@ void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, con
     }
   );
 
+  #ifdef DEBUG_MODE
+  double normalization_time = stop_watch.ElapsedTime();
+  ROS_INFO("Normalize network input: %f ms (%f fps)", 1000.0*normalization_time, 1.0/normalization_time);
+  #endif // DEBUG_MODE
+
+  #ifdef DEBUG_MODE
+  stop_watch.Start();
+  #endif // DEBUG_MODE
+
   // TODO use asynchronus memcopy as in bonnetal
 
   // transfer to device
@@ -97,9 +127,12 @@ void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, con
                           cudaMemcpyHostToDevice));
 
   #ifdef DEBUG_MODE
-  // stop watch code provided by Marcell Missura
-  struct timespec last;
-  clock_gettime(CLOCK_MONOTONIC, &last);
+  double data_transfer_time = stop_watch.ElapsedTime();
+  ROS_INFO("Transfer data to device: %f ms (%f fps)", 1000.0*data_transfer_time, 1.0/data_transfer_time);
+  #endif // DEBUG_MODE
+
+  #ifdef DEBUG_MODE
+  stop_watch.Start();
   #endif // DEBUG_MODE
 
   // pass through network
@@ -107,12 +140,8 @@ void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, con
   HANDLE_ERROR(cudaDeviceSynchronize());
 
   #ifdef DEBUG_MODE
-  struct timespec now;
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  long diff_in_secs = now.tv_sec - last.tv_sec;
-  long diff_in_nanos = now.tv_nsec - last.tv_nsec;
-  double time = (double)diff_in_secs + (double)diff_in_nanos/1000000000;
-  std::cout << "Network inference time: " << time << "s (" << 1.0/time << "fps)\n";
+  double inference_time = stop_watch.ElapsedTime();
+  ROS_INFO("Network inference time: %f ms (%f fps)", 1000.0*inference_time, 1.0/inference_time);
   #endif // DEBUG_MODE
 
   // transfer back to host
