@@ -4,7 +4,6 @@
 /*!
  * @file crop_detection.hpp
  *
- * @author Jan Quakernack
  * @version 0.1
  */
 
@@ -17,7 +16,9 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
 
-#include "library_crop_detection/tensorrt_network.hpp"
+//#include "library_crop_detection/tensorrt_network.hpp"
+#include "library_crop_detection/network.hpp"
+#include "library_crop_detection/network_output_visualizer.hpp"
 
 namespace igg {
 
@@ -34,6 +35,8 @@ public:
                 const std::string& kRgbImageTopic,
                 const std::string& kNirImageTopic,
                 const std::string& kPathToModelFile);
+
+  ~CropDetection();
 
 private:
   /*!
@@ -55,18 +58,23 @@ private:
   message_filters::TimeSynchronizer <sensor_msgs::Image, sensor_msgs::Image> time_synchronizer_;
 
   //! Publisher for network outputs.
-  image_transport::Publisher network_input_image_publisher_;
-  image_transport::Publisher network_background_confidence_publisher_;
-  image_transport::Publisher network_weed_confidence_publisher_;
-  image_transport::Publisher network_sugar_beet_confidence_publisher_;
-  image_transport::Publisher network_semantic_class_labels_publisher_;
-  image_transport::Publisher network_visualization_publisher_;
+  image_transport::Publisher semantic_labels_publisher_;
+  ros::Publisher stem_positions_publisher_;
 
-  ros::Publisher stem_inference_publisher_;
+  //! Publisher for visualizations.
+  image_transport::Publisher input_bgr_publisher_;
+  image_transport::Publisher input_nir_publisher_;
+  image_transport::Publisher input_false_color_publisher_;
+  image_transport::Publisher visualization_publisher_;
+  image_transport::Publisher visualization_semantics_publisher_;
+  image_transport::Publisher visualization_keypoints_publisher_;
+  image_transport::Publisher visualization_votes_publisher_;
 
   //! Network.
-  // std::unique_ptr<igg::Network> network_ = nullptr;
-  igg::TensorrtNetwork network_ = igg::TensorrtNetwork(NetworkParameters());
+  std::unique_ptr<igg::Network> network_ = nullptr;
+
+  //! Visualizer.
+  const NetworkOutputVisualizer kVisualizer_;
 };
 
 } // namespace igg

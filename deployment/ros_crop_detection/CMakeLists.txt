@@ -10,6 +10,18 @@ set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 #set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
+## Build type is debug by default
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Debug)
+  #set(CMAKE_BUILD_TYPE Release)
+endif()
+
+## Use DEBUG_MODE preprocessor flag
+if(${CMAKE_BUILD_TYPE} MATCHES Debug)
+  add_definitions(-DDEBUG_MODE)
+  message(STATUS "Build with debug option.")
+endif()
+
 ## Find catkin macros and libraries
 find_package(catkin REQUIRED COMPONENTS
   roscpp
@@ -69,7 +81,7 @@ endif(Boost_FOUND)
 ## Generate messages in the 'msg' folder
 add_message_files(
   FILES
-  StemInference.msg
+  StemPositions.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -123,7 +135,6 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-message(WARNING "catkin_INCLUDE_DIRS  ${catkin_INCLUDE_DIRS}")
 
 include_directories(
   include
