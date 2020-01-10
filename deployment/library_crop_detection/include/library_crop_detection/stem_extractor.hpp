@@ -14,7 +14,7 @@ namespace igg {
 struct StemExtractorParameters {
   float keypoint_radius = 15.0;
   int kernel_size_votes = 3;
-  int kernel_size_peaks = 7;
+  int kernel_size_peaks = 5;
   float threshold_votes = 0.001;
   float threshold_peaks = 0.1;
 };

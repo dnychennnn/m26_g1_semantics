@@ -1,7 +1,6 @@
 /*!
  * @file crop_detection.cpp
  *
- * @author Jan Quakernack
  * @version 0.1
  */
 
@@ -14,8 +13,8 @@
 #include <boost/bind.hpp>
 #include <opencv2/opencv.hpp>
 
-#include "library_crop_detection/tensorrt_common.hpp"
 #include "library_crop_detection/tensorrt_network.hpp"
+#include "library_crop_detection/pytorch_network.hpp"
 #include "library_crop_detection/network_output.hpp"
 
 // Custom message wrapping around predicted stem positions
@@ -63,10 +62,15 @@ CropDetection::CropDetection(ros::NodeHandle& node_handle,
     ROS_INFO("Attempt to init TensorRT network.");
     this->network_ = std::make_unique<TensorrtNetwork>(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
     this->network_->Load(kPathToModelFile+".onnx", false); // false as we do not enforce rebuilding the model
-  } catch (const TensorrtNotAvailableException& kError) {
-    // TODO Attempt to load pytorch model.
-    ROS_ERROR("Cannot initialize any network. Shutdown.");
-    ros::requestShutdown();
+  } catch (const std::exception& kError) {
+    ROS_WARN("Cannot init TensorRT network ('%s'). Trying Torch.", kError.what());
+    try {
+      this->network_ = std::make_unique<PytorchNetwork>(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
+      this->network_->Load(kPathToModelFile+".pt", false);
+    } catch (const std::exception& kError) {
+      ROS_ERROR("Cannot initialize any network ('%s'). Shutdown.", kError.what());
+      ros::requestShutdown();
+    }
   }
 }
 

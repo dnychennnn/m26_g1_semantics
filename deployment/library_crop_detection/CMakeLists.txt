@@ -5,9 +5,11 @@ project(library_crop_detection)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_CUDA_STANDARD 11)
+
 ## Flags to explicitly enable/disable CUDA/TensorRT
 set(CUDA_ENABLED TRUE)
-set(TENSORRT_ENABLED TRUE)
+set(TENSORRT_ENABLED FALSE)
 set(TORCH_ENABLED TRUE)
 message(STATUS "Enable build with CUDA: ${CUDA_ENABLED}")
 message(STATUS "Enable build with TensorRT: ${TENSORRT_ENABLED}")

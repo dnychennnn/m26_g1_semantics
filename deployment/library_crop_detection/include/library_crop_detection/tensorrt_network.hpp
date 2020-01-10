@@ -1,6 +1,5 @@
 #ifndef M26_G1_SEMANTICS_DEPLOYMENT_LIBRARY_CROP_DETECTION_INCLUDE_LIBRARY_CROP_DETECTION_TENSORRT_NETWORK_HPP_
 #define M26_G1_SEMANTICS_DEPLOYMENT_LIBRARY_CROP_DETECTION_INCLUDE_LIBRARY_CROP_DETECTION_TENSORRT_NETWORK_HPP_
-
 /*!
  * @file tensorrt_network.hpp
  *
@@ -39,6 +38,7 @@ private:
 
 
 class TensorrtNetwork: public Network {
+
 public:
   TensorrtNetwork(const NetworkParameters& kNetworkParameters,
       const SemanticLabelerParameters& kSemanticLabelerParameters,
@@ -104,6 +104,7 @@ private:
   #ifdef TENSORRT_AVAILABLE
   TensorrtNetworkLogger logger_;
   nvinfer1::ICudaEngine* engine_ = nullptr;
+  nvinfer1::IExecutionContext* context_ = nullptr;
   #endif // TENSORRT_AVAILABLE
 
   const SemanticLabeler kSemanticLabeler_;

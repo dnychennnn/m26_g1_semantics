@@ -51,6 +51,7 @@ TensorrtNetwork::TensorrtNetwork(
 TensorrtNetwork::~TensorrtNetwork() {
   ASSERT_TENSORRT_AVAILABLE;
   #ifdef TENSORRT_AVAILABLE
+  if(this->context_){this->context_->destroy();}
   if(this->engine_){this->engine_->destroy();}
   this->FreeBufferMemory();
   #endif // TENSORRT_AVAILABLE
@@ -70,8 +71,11 @@ void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
     throw std::runtime_error("No engine loaded.");
   }
 
-  auto context = this->engine_->createExecutionContext();
-  if (!context) {
+  if (!this->context_) {
+    this->context_ = this->engine_->createExecutionContext();
+  }
+
+  if (!this->context_) {
     throw std::runtime_error("Could not create execution context.");
   }
 
@@ -119,72 +123,57 @@ void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
   stop_watch.Start();
   #endif // DEBUG_MODE
 
-  // TODO use asynchronus memcopy as in bonnetal
+  // use a separate cuda stream
+  cudaStream_t stream;
+  HANDLE_ERROR(cudaStreamCreate(&stream));
 
   // transfer to device
-  HANDLE_ERROR(cudaMemcpy(this->device_buffers_[this->input_binding_index_],
-                          this->host_buffer_,
-                          4*this->input_width_*this->input_height_*this->input_channels_,
-                          cudaMemcpyHostToDevice));
-
-  #ifdef DEBUG_MODE
-  double data_transfer_time = stop_watch.ElapsedTime();
-  ROS_INFO("Transfer data to device: %f ms (%f fps)", 1000.0*data_transfer_time, 1.0/data_transfer_time);
-  #endif // DEBUG_MODE
-
-  #ifdef DEBUG_MODE
-  stop_watch.Start();
-  #endif // DEBUG_MODE
+  HANDLE_ERROR(cudaMemcpyAsync(this->device_buffers_[this->input_binding_index_],
+                               this->host_buffer_,
+                               4*this->input_width_*this->input_height_*this->input_channels_,
+                               cudaMemcpyHostToDevice,
+                               stream));
 
   // pass through network
-  context->executeV2(&((this->device_buffers_)[this->input_binding_index_])); // version 2 is without batch size
-  HANDLE_ERROR(cudaDeviceSynchronize());
-
-  #ifdef DEBUG_MODE
-  double inference_time = stop_watch.ElapsedTime();
-  ROS_INFO("Network inference time: %f ms (%f fps)", 1000.0*inference_time, 1.0/inference_time);
-  #endif // DEBUG_MODE
-
-  // transfer back to host
-
-  #ifdef DEBUG_MODE
-  stop_watch.Start();
-  #endif // DEBUG_MODE
+  cudaEvent_t event_input_consumed; // triggered when buffer can be refilled, not used here
+  HANDLE_ERROR(cudaEventCreate(&event_input_consumed));
+  this->context_->enqueueV2(&((this->device_buffers_)[this->input_binding_index_]), stream, &event_input_consumed); // version 2 is without batch size
 
   // retrieve semantic class confidences
   for(int class_index=0; class_index<this->semantic_output_channels_; class_index++) {
-    HANDLE_ERROR(cudaMemcpy(result.ServeSemanticClassConfidenceBuffer(class_index, this->semantic_output_width_, this->semantic_output_height_),
-                            this->device_buffers_[this->semantic_output_binding_index_]
-                            +4*class_index*this->semantic_output_height_*this->semantic_output_width_,
-                            4*this->semantic_output_width_*this->semantic_output_height_,
-                            cudaMemcpyDeviceToHost));
+    HANDLE_ERROR(cudaMemcpyAsync(result.ServeSemanticClassConfidenceBuffer(class_index, this->semantic_output_width_, this->semantic_output_height_),
+                                 this->device_buffers_[this->semantic_output_binding_index_]
+                                 +4*class_index*this->semantic_output_height_*this->semantic_output_width_,
+                                 4*this->semantic_output_width_*this->semantic_output_height_,
+                                 cudaMemcpyDeviceToHost, stream));
   }
 
   // retrieve stem keypoint confidence
-  HANDLE_ERROR(cudaMemcpy(result.ServeStemKeypointConfidenceBuffer(this->stem_keypoint_output_width_, this->stem_keypoint_output_height_),
-                          this->device_buffers_[this->stem_keypoint_output_binding_index_],
-                          4*this->stem_keypoint_output_width_*this->stem_keypoint_output_height_*this->stem_keypoint_output_channels_,
-                          cudaMemcpyDeviceToHost));
+  HANDLE_ERROR(cudaMemcpyAsync(result.ServeStemKeypointConfidenceBuffer(this->stem_keypoint_output_width_, this->stem_keypoint_output_height_),
+                               this->device_buffers_[this->stem_keypoint_output_binding_index_],
+                               4*this->stem_keypoint_output_width_*this->stem_keypoint_output_height_*this->stem_keypoint_output_channels_,
+                               cudaMemcpyDeviceToHost, stream));
 
   // retrieve stem offset x
-  HANDLE_ERROR(cudaMemcpy(result.ServeStemOffsetXBuffer(this->stem_offset_output_width_, this->stem_offset_output_height_),
-                          this->device_buffers_[this->stem_offset_output_binding_index_],
-                          4*this->stem_offset_output_width_*this->stem_offset_output_height_,
-                          cudaMemcpyDeviceToHost));
+  HANDLE_ERROR(cudaMemcpyAsync(result.ServeStemOffsetXBuffer(this->stem_offset_output_width_, this->stem_offset_output_height_),
+                               this->device_buffers_[this->stem_offset_output_binding_index_],
+                               4*this->stem_offset_output_width_*this->stem_offset_output_height_,
+                               cudaMemcpyDeviceToHost, stream));
 
   // retrieve stem offset y
-  HANDLE_ERROR(cudaMemcpy(result.ServeStemOffsetYBuffer(this->stem_offset_output_width_, this->stem_offset_output_height_),
-                          this->device_buffers_[this->stem_offset_output_binding_index_]
-                          +4*this->stem_offset_output_width_*this->stem_offset_output_height_,
-                          4*this->stem_offset_output_width_*this->stem_offset_output_height_,
-                          cudaMemcpyDeviceToHost));
+  HANDLE_ERROR(cudaMemcpyAsync(result.ServeStemOffsetYBuffer(this->stem_offset_output_width_, this->stem_offset_output_height_),
+                               this->device_buffers_[this->stem_offset_output_binding_index_]
+                               +4*this->stem_offset_output_width_*this->stem_offset_output_height_,
+                               4*this->stem_offset_output_width_*this->stem_offset_output_height_,
+                               cudaMemcpyDeviceToHost, stream));
+
+  HANDLE_ERROR(cudaStreamSynchronize(stream));
+  HANDLE_ERROR(cudaStreamDestroy(stream));
 
   #ifdef DEBUG_MODE
-  double data_host_transfer_time = stop_watch.ElapsedTime();
-  ROS_INFO("Transfer data to host: %f ms (%f fps)", 1000.0*data_host_transfer_time, 1.0/data_transfer_time);
+  double inference_time = stop_watch.ElapsedTime();
+  ROS_INFO("Network inference time (including data transfer): %f ms (%f fps)", 1000.0*inference_time, 1.0/inference_time);
   #endif // DEBUG_MODE
-
-  context->destroy();
 
   // postprocessing
   this->kSemanticLabeler_.Infer(result);
@@ -242,7 +231,7 @@ void TensorrtNetwork::Load(const std::string& kFilepath, const bool kForceRebuil
     // store model to disk
     auto serialized_model = this->engine_->serialize();
     if (!serialized_model) {
-      std::cerr << "Cannot serialize engine.\n";
+      std::cout << "Warning: Cannot serialize engine.\n";
     } else {
       std::ofstream serialized_model_output_file(kEngineFilepath, std::ios::binary);
       serialized_model_output_file.write(reinterpret_cast<const char*>(serialized_model->data()), serialized_model->size());
@@ -260,7 +249,7 @@ bool TensorrtNetwork::LoadSerialized(const std::string& kFilepath) {
 
   std::ifstream model_file(kFilepath, std::ios::binary);
   if (!model_file) {
-    std::cout << "Cannnot read model engine: '" << kFilepath << "'\n";
+    std::cout << "Warning: Cannnot read model engine: '" << kFilepath << "'\n";
     model_file.close();
     return false;
   }
@@ -272,45 +261,31 @@ bool TensorrtNetwork::LoadSerialized(const std::string& kFilepath) {
   model_stream << model_file.rdbuf();
   model_file.close();
 
-  //std::cout << "Closed file." << std::endl;
-
   model_stream.seekg(0, std::ios::end);
   const size_t kModelSize = model_stream.tellg();
   model_stream.seekg(0, std::ios::beg);
 
-  //std::cout << "Model size: " << kModelSize << std::endl;
-
   void* model_memory = malloc(kModelSize);
   if (!model_memory) {
-    std::cerr << "Cannot allocate memory to load serialized model.\n";
+    std::cout << "Warning: Cannot allocate memory to load serialized model.\n";
     return false;
   }
 
-  //std::cout << "Allocated." << std::endl;
-
   model_stream.read(reinterpret_cast<char*>(model_memory), kModelSize);
 
-  //std::cout << "Read." << std::endl;
-
   if (this->engine_) {this->engine_->destroy();}
-
-  //std::cout << "Create runtime." << std::endl;
 
   nvinfer1::IRuntime* runtime = nvinfer1::createInferRuntime(this->logger_);
 
   if (!runtime) {
-    std::cerr << "Could not create runtime." << std::endl;
+    std::cout << "Warning: Cannot not create runtime." << std::endl;
     return false;
   }
 
   this->engine_ = runtime->deserializeCudaEngine(model_memory, kModelSize, nullptr);
 
-  //std::cout << "Serialized." << std::endl;
-
   free(model_memory);
   runtime->destroy();
-
-  //std::cout << "Freed." << std::endl;
 
   return true;
   #endif // TENSORRT_AVAILABLE
