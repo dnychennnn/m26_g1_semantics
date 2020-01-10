@@ -1,4 +1,4 @@
-# deployment parameters (used for model freezing/onnx export)
+# deployment parameters (used for model onnx/pt export)
 
 batch_size: 1
 input_channels: 4
