@@ -1,4 +1,10 @@
-#include "library_crop_detection/opencv_stem_inference.hpp"
+/*
+ * @file stem_extractor.cpp
+ *
+ * @version 0.1
+ */
+
+#include "library_crop_detection/stem_extractor.hpp"
 
 #include <iostream>
 #include <math.h> // for pi
@@ -16,49 +22,33 @@
 
 namespace igg {
 
-StemInferenceParameters::StemInferenceParameters(const NetworkParameters kParameters):
-    keypoint_radius{kParameters.keypoint_radius},
-    kernel_size_votes{kParameters.kernel_size_votes},
-    kernel_size_peaks{kParameters.kernel_size_peaks},
-    threshold_votes{kParameters.threshold_votes},
-    threshold_peaks{kParameters.threshold_peaks} {}
-
-
-OpencvStemInference::OpencvStemInference(const StemInferenceParameters& kParameters):
+StemExtractor::StemExtractor(const StemExtractorParameters& kParameters):
     kKeypointRadius_{kParameters.keypoint_radius},
     kKernelSizeVotes_{kParameters.kernel_size_votes},
     kKernelSizePeaks_{kParameters.kernel_size_peaks},
     kThresholdVotes_{kParameters.threshold_votes},
-    kThresholdPeaks_{kParameters.threshold_peaks} {}
+    kThresholdPeaks_{kParameters.threshold_peaks},
+    kVotesNormalization_{static_cast<float>(M_PI)*kParameters.keypoint_radius*kParameters.keypoint_radius} {}
 
 
-OpencvStemInference::OpencvStemInference():
-    kKeypointRadius_{15.0},
-    kKernelSizeVotes_{3},
-    kKernelSizePeaks_{7},
-    kThresholdVotes_{0.0},
-    kThresholdPeaks_{0.1},
-    kVotesNormalization_{M_PI*15.0*15.0} {}
-
-
-void OpencvStemInference::Infer(NetworkInference* inference) const {
+void StemExtractor::Infer(NetworkOutput& result) const {
   #ifdef DEBUG_MODE
   // measure extraction time in debug mode
   StopWatch stop_watch;
   #endif // DEBUG_MODE
 
-  cv::Mat stem_keypoint_confidence = inference->StemKeypointConfidence();
-  if(stem_keypoint_confidence.empty()) {
+  const cv::Mat& kStemKeypointConfidence = result.StemKeypointConfidence();
+  if(kStemKeypointConfidence.empty()) {
     throw std::runtime_error("Stem keypoint confidences not available.");
   }
 
-  cv::Mat offset_x = inference->StemOffsetX();
-  if(offset_x.empty()) {
+  const cv::Mat& kOffsetX = result.StemOffsetX();
+  if(kOffsetX.empty()) {
     throw std::runtime_error("Stem offset x not available.");
   }
 
-  cv::Mat offset_y = inference->StemOffsetY();
-  if(offset_y.empty()) {
+  const cv::Mat& kOffsetY = result.StemOffsetY();
+  if(kOffsetY.empty()) {
     throw std::runtime_error("Stem offset y not available.");
   }
 
@@ -66,15 +56,16 @@ void OpencvStemInference::Infer(NetworkInference* inference) const {
   stop_watch.Start();
   #endif // DEBUG_MODE
 
-  cv::Mat votes = cv::Mat::zeros(stem_keypoint_confidence.rows,
-      stem_keypoint_confidence.cols, CV_32FC1);
+  cv::Mat& votes = result.ServeVotes(
+      kStemKeypointConfidence.rows, kStemKeypointConfidence.cols);
+  votes.setTo(0.0f); // fill with zeros
 
-  stem_keypoint_confidence.forEach<float>(
+  kStemKeypointConfidence.forEach<float>(
     [&](const float kWeight, const int* kPosition) {
         if (kWeight>this->kThresholdVotes_) {
-          const int kVoteX = kPosition[1]+this->kKeypointRadius_*offset_x.at<float>(kPosition[0], kPosition[1]);
+          const int kVoteX = kPosition[1]+this->kKeypointRadius_*kOffsetX.at<float>(kPosition[0], kPosition[1]);
           if (kVoteX<0 || kVoteX>=votes.cols) {return;}
-          const int kVoteY = kPosition[0]+this->kKeypointRadius_*offset_y.at<float>(kPosition[0], kPosition[1]);
+          const int kVoteY = kPosition[0]+this->kKeypointRadius_*kOffsetY.at<float>(kPosition[0], kPosition[1]);
           if (kVoteY<0 || kVoteY>=votes.rows) {return;}
           votes.at<float>(kVoteY, kVoteX) += kWeight;
         }
@@ -103,15 +94,27 @@ void OpencvStemInference::Infer(NetworkInference* inference) const {
   cv::Mat peak_positions;
   cv::findNonZero(peaks, peak_positions);
 
-  std::vector<cv::Vec2f> stem_positions;
+  std::vector<cv::Vec3f> stem_positions;
+  stem_positions.reserve(peak_positions.rows);
 
+  // give stem positions with respect to input image
+  const cv::Mat& kInputImage = result.InputImage();
+  float scaling_x = static_cast<float>(kInputImage.cols)/static_cast<float>(votes.cols);
+  float scaling_y = static_cast<float>(kInputImage.rows)/static_cast<float>(votes.rows);
+
+  int position_x, position_y;
+  float confidence;
   for(int index=0; index<peak_positions.rows; index++) {
-    stem_positions.emplace_back(cv::Vec2f(peak_positions.at<int>(index, 0),
-                                          peak_positions.at<int>(index, 1)));
+    position_x = scaling_x*(0.5+peak_positions.at<int>(index, 0));
+    position_y = scaling_y*(0.5+peak_positions.at<int>(index, 1));
+    confidence = votes.at<float>(position_y, position_x);
+
+    stem_positions.emplace_back(cv::Vec3f(static_cast<float>(position_x),
+                                          static_cast<float>(position_y),
+                                          confidence));
   }
 
-  inference->SetVotes(std::move(votes));
-  inference->SetStemPositions(std::move(stem_positions));
+  result.SetStemPositions(std::move(stem_positions));
 
   #ifdef DEBUG_MODE
   double extraction_time = stop_watch.ElapsedTime();

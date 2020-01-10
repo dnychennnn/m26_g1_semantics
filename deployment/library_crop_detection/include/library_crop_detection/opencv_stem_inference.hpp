@@ -3,11 +3,11 @@
 /*
  * @file opencv_stem_inference.hpp
  *
- * @author Jan Quakernack
  * @version 0.1
  */
 
-#include "network.hpp"
+#include "library_crop_detection/network.hpp"
+#include "library_crop_detection/network_inference.hpp"
 
 namespace igg {
 
@@ -38,6 +38,7 @@ private:
   const int kKernelSizePeaks_;
   const float kThresholdVotes_;
   const float kThresholdPeaks_;
+  const float kVotesNormalization_ = 0.0;
 };
 
 } // namespace igg
