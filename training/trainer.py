@@ -21,7 +21,7 @@ from training.evalmetrics import (compute_confusion_matrix,
                                   compute_stem_metrics,
                                   compute_metrics_from_confusion_matrix,
                                   plot_confusion_matrix)
-from training.postprocessing.stem_inference import StemInference
+from training.postprocessing.stem_extraction import StemExtraction
 
 class Trainer:
 
@@ -77,6 +77,8 @@ class Trainer:
                  stem_inference_kernel_size_peaks,
                  stem_inference_threshold_votes,
                  stem_inference_threshold_peaks,
+                 sugar_beet_threshold,
+                 weed_threshold,
                  tolerance_radius,
                  **extra_arguments):
 
@@ -93,6 +95,8 @@ class Trainer:
         self.target_width = target_width
         self.keypoint_radius = keypoint_radius
         self.tolerance_radius = tolerance_radius
+        self.sugar_beet_threshold = sugar_beet_threshold
+        self.weed_threshold = weed_threshold
 
         # init loss weights
         loss_norm = semantic_loss_weight+stem_loss_weight
@@ -130,7 +134,7 @@ class Trainer:
 
         # init postprocessing
 
-        self.stem_inference_module = StemInference(
+        self.stem_inference_module = StemExtraction(
                 input_width=self.target_width,
                 input_height=self.target_height,
                 keypoint_radius=self.keypoint_radius,
@@ -462,7 +466,8 @@ class Trainer:
                             stem_position_target=stem_position_target_list[0],
                             test_run=test_run)
 
-            accumulated_confusion_matrix_val += compute_confusion_matrix(semantic_output_batch, semantic_target_batch)
+            accumulated_confusion_matrix_val += compute_confusion_matrix(semantic_output_batch,
+                    semantic_target_batch, self.sugar_beet_threshold, self.weed_threshold)
 
             # comute stem metrics
             confusion_matrix_stem_val, deviation_val = compute_stem_metrics(stem_position_output_batch,

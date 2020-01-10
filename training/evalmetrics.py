@@ -4,7 +4,7 @@ from sklearn.metrics import confusion_matrix
 import yaml
 from pathlib import Path
 import torch
-from training.postprocessing.semantic_inference import make_classification_map
+from training.postprocessing.semantic_labeling import make_classification_map
 
 def compute_stem_metrics(stem_position_output, stem_position_target, tolerance_radius):
     """Compute metrics for evaluation of the stem detection.
@@ -70,10 +70,11 @@ def compute_stem_metrics(stem_position_output, stem_position_target, tolerance_r
     return stem_confusion_matrix, accum_deviation
 
 
-def compute_confusion_matrix(semantic_output_batch, semantic_target_batch):
+def compute_confusion_matrix(semantic_output_batch, semantic_target_batch, sugar_beet_threshold, weed_threshold):
     """Note: The input will be a batch.
     """
-    predicted_semantic_labels = make_classification_map(semantic_output_batch).cpu().detach().numpy()
+    predicted_semantic_labels = make_classification_map(semantic_output_batch,
+            sugar_beet_threshold, weed_threshold).cpu().detach().numpy()
     actual_semantic_labels = semantic_target_batch.cpu().detach().numpy()
 
     valid_pixels = np.where(actual_semantic_labels!=3) # do not use pixels labeled as ignored (index=3)

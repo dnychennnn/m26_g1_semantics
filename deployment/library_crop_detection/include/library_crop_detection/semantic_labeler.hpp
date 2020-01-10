@@ -14,8 +14,8 @@
 namespace igg {
 
 struct SemanticLabelerParameters {
-  float threshold_sugar_beet = 0.5;
-  float threshold_weed = 0.5;
+  float threshold_sugar_beet = 0.8;
+  float threshold_weed = 0.8;
 };
 
 
