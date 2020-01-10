@@ -9,7 +9,7 @@ set(CMAKE_CUDA_STANDARD 11)
 
 ## Flags to explicitly enable/disable CUDA/TensorRT
 set(CUDA_ENABLED TRUE)
-set(TENSORRT_ENABLED FALSE)
+set(TENSORRT_ENABLED TRUE)
 set(TORCH_ENABLED TRUE)
 message(STATUS "Enable build with CUDA: ${CUDA_ENABLED}")
 message(STATUS "Enable build with TensorRT: ${TENSORRT_ENABLED}")

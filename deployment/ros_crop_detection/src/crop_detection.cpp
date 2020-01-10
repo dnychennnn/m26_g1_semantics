@@ -7,6 +7,7 @@
 #include "ros_crop_detection/crop_detection.hpp"
 
 #include <vector>
+#include <string>
 
 #include <cv_bridge/cv_bridge.h>
 
@@ -28,7 +29,10 @@ namespace fs = boost::filesystem;
 CropDetection::CropDetection(ros::NodeHandle& node_handle,
                              const std::string& kRgbImageTopic,
                              const std::string& kNirImageTopic,
-                             const std::string& kPathToModelFile):
+                             const std::string& kArchitectureName,
+                             const NetworkParameters& kNetworkParameters,
+                             const SemanticLabelerParameters& kSemanticLabelerParameters,
+                             const StemExtractorParameters& kStemExtractorParameters):
       node_handle_{node_handle},
       rgb_image_subscriber_{this->node_handle_, kRgbImageTopic, 1},
       nir_image_subscriber_{this->node_handle_, kNirImageTopic, 1},
@@ -54,19 +58,15 @@ CropDetection::CropDetection(ros::NodeHandle& node_handle,
   this->visualization_keypoints_publisher_ = transport.advertise("visualization_keypoints", 1);
   this->visualization_votes_publisher_ = transport.advertise("visualization_votes", 1);
 
-  NetworkParameters kNetworkParameters;
-  SemanticLabelerParameters kSemanticLabelerParameters;
-  StemExtractorParameters kStemExtractorParameters;
-
   try {
     ROS_INFO("Attempt to init TensorRT network.");
     this->network_ = std::make_unique<TensorrtNetwork>(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
-    this->network_->Load(kPathToModelFile+".onnx", false); // false as we do not enforce rebuilding the model
+    this->network_->Load((Network::ModelsDir()/(kArchitectureName+".onnx")).string(), false); // false as we do not enforce rebuilding the model
   } catch (const std::exception& kError) {
     ROS_WARN("Cannot init TensorRT network ('%s'). Trying Torch.", kError.what());
     try {
       this->network_ = std::make_unique<PytorchNetwork>(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
-      this->network_->Load(kPathToModelFile+".pt", false);
+      this->network_->Load((Network::ModelsDir()/(kArchitectureName+".pt")).string(), false);
     } catch (const std::exception& kError) {
       ROS_ERROR("Cannot initialize any network ('%s'). Shutdown.", kError.what());
       ros::requestShutdown();

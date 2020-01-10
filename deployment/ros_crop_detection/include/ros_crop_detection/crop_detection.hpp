@@ -34,7 +34,10 @@ public:
   CropDetection(ros::NodeHandle& node_handle,
                 const std::string& kRgbImageTopic,
                 const std::string& kNirImageTopic,
-                const std::string& kPathToModelFile);
+                const std::string& kArchitectureName,
+                const NetworkParameters& kNetworkParameters,
+                const SemanticLabelerParameters& kSemanticLabelerParameters,
+                const StemExtractorParameters& kStemExtractorParameters);
 
   ~CropDetection();
 
