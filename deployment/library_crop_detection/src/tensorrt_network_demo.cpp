@@ -5,16 +5,17 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 
-#include "library_crop_detection/network_inference.hpp"
+#include "library_crop_detection/network_output.hpp"
 #include "library_crop_detection/tensorrt_network.hpp"
+#include "library_crop_detection/network_output_visualizer.hpp"
 
 int main() {
-   //get some test image
+  // get some test image
   cv::Mat input_rgb = cv::imread("test_data/test_rgb.png", cv::IMREAD_UNCHANGED);
-  cv::imshow("input_rgb", input_rgb);
+  //cv::imshow("input_rgb", input_rgb);
   cv::cvtColor(input_rgb, input_rgb, cv::COLOR_BGR2RGB);
   cv::Mat input_nir = cv::imread("test_data/test_nir.png", cv::IMREAD_UNCHANGED);
-  cv::imshow("input_nir", input_nir);
+  //cv::imshow("input_nir", input_nir);
 
   // merge to 4 channels
   std::vector<cv::Mat> channels;
@@ -23,10 +24,12 @@ int main() {
   cv::Mat input;
   cv::merge(channels, input);
 
-  const igg::NetworkParameters kParameters;
+  const igg::NetworkParameters kNetworkParameters;
+  const igg::SemanticLabelerParameters kSemanticLabelerParameters;
+  const igg::StemExtractorParameters kStemExtractorParameters;
 
   // create network instance
-  igg::TensorrtNetwork network(kParameters);
+  igg::TensorrtNetwork network(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
 
   // load onnx file or use serialized engine if available
   const auto model_path = igg::Network::ModelsDir()/"hardnet56.onnx";
@@ -37,14 +40,18 @@ int main() {
   std::cout << "Network ready to infer: " << network.IsReadyToInfer() << "\n";
 
   // pass image
-  igg::NetworkInference result;
-  network.Infer(&result, input, false);
+  igg::NetworkOutput result;
+  network.Infer(result, input);
 
-  cv::imshow("input_image", result.InputImageAsFalseColorBgr());
-  cv::imshow("background_confidence", result.SemanticClassConfidence(0));
-  cv::imshow("weed_confidence", result.SemanticClassConfidence(1));
-  cv::imshow("sugar_beet_confidence", result.SemanticClassConfidence(2));
-  cv::imshow("stem_keypoint_confidence", result.StemKeypointConfidence());
-  cv::imshow("all", result.MakePlot());
+  // visualization
+  igg::NetworkOutputVisualizer visualizer;
+
+  cv::imshow("input_false_color", visualizer.MakeInputFalseColorVisualization(result));
+  cv::imshow("input_bgr", visualizer.MakeInputBgrVisualization(result));
+  cv::imshow("input_nir", visualizer.MakeInputNirVisualization(result));
+  cv::imshow("output", visualizer.MakeVisualization(result));
+  cv::imshow("output_semantics", visualizer.MakeSemanticsVisualization(result));
+  cv::imshow("output_keypoints", visualizer.MakeKeypointsVisualization(result));
+  cv::imshow("keypoint_votes", visualizer.MakeVotesVisualization(result));
   cv::waitKey(0);
 }

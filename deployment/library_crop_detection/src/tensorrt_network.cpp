@@ -3,7 +3,6 @@
  *
  * Reference: https://github.com/PRBonn/bonnetal/blob/master/deploy/src/segmentation/lib/src/netTensorRT.cpp
  *
- * @author Jan Quakernack
  * @version 0.1
  */
 
@@ -24,10 +23,12 @@
 
 #ifdef DEBUG_MODE
 #include <ros/console.h>
-#include "stop_watch.hpp"
+#include "library_crop_detection/stop_watch.hpp"
 #endif // DEBUG_MODE
 
+#ifdef CUDA_AVAILABLE
 #include "handle_cuda_error.hpp"
+#endif // CUDA_AVAILABLE
 
 
 namespace igg {
@@ -35,14 +36,14 @@ namespace igg {
 namespace fs = boost::filesystem;
 
 
-TensorrtNetwork::TensorrtNetwork():
-    mean_{0.386, 0.227, 0.054, 0.220}, std_{0.124, 0.072, 0.0108, 0.066} {
-  ASSERT_TENSORRT_AVAILABLE;
-}
-
-
-TensorrtNetwork::TensorrtNetwork(const NetworkParameters& kParameters):
-    mean_{kParameters.mean}, std_{kParameters.std}, kStemInference_{OpencvStemInference({kParameters})} {
+TensorrtNetwork::TensorrtNetwork(
+    const NetworkParameters& kNetworkParameters,
+    const SemanticLabelerParameters& kSemanticLabelerParameters,
+    const StemExtractorParameters& kStemExtractorParameters):
+    mean_{kNetworkParameters.mean},
+    std_{kNetworkParameters.std},
+    kSemanticLabeler_{SemanticLabeler(kSemanticLabelerParameters)},
+    kStemExtractor_{StemExtractor(kStemExtractorParameters)} {
   ASSERT_TENSORRT_AVAILABLE;
 }
 
@@ -56,7 +57,7 @@ TensorrtNetwork::~TensorrtNetwork() {
 }
 
 
-void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, const bool kMinimalInference) {
+void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
   ASSERT_TENSORRT_AVAILABLE;
   #ifdef TENSORRT_AVAILABLE
 
@@ -83,7 +84,7 @@ void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, con
   cv::resize(kImage, input, cv::Size(this->input_width_, this->input_height_));
 
   // return resized image as well
-  std::memcpy(result->ServeInputImageBuffer(this->input_width_, this->input_height_),
+  std::memcpy(result.ServeInputImageBuffer(this->input_width_, this->input_height_),
       input.ptr(), 4*this->input_width_*this->input_height_);
 
   #ifdef DEBUG_MODE
@@ -146,9 +147,13 @@ void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, con
 
   // transfer back to host
 
+  #ifdef DEBUG_MODE
+  stop_watch.Start();
+  #endif // DEBUG_MODE
+
   // retrieve semantic class confidences
   for(int class_index=0; class_index<this->semantic_output_channels_; class_index++) {
-    HANDLE_ERROR(cudaMemcpy(result->ServeSemanticClassConfidenceBuffer(class_index, this->semantic_output_width_, this->semantic_output_height_),
+    HANDLE_ERROR(cudaMemcpy(result.ServeSemanticClassConfidenceBuffer(class_index, this->semantic_output_width_, this->semantic_output_height_),
                             this->device_buffers_[this->semantic_output_binding_index_]
                             +4*class_index*this->semantic_output_height_*this->semantic_output_width_,
                             4*this->semantic_output_width_*this->semantic_output_height_,
@@ -156,28 +161,34 @@ void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, con
   }
 
   // retrieve stem keypoint confidence
-  HANDLE_ERROR(cudaMemcpy(result->ServeStemKeypointConfidenceBuffer(this->stem_keypoint_output_width_, this->stem_keypoint_output_height_),
+  HANDLE_ERROR(cudaMemcpy(result.ServeStemKeypointConfidenceBuffer(this->stem_keypoint_output_width_, this->stem_keypoint_output_height_),
                           this->device_buffers_[this->stem_keypoint_output_binding_index_],
                           4*this->stem_keypoint_output_width_*this->stem_keypoint_output_height_*this->stem_keypoint_output_channels_,
                           cudaMemcpyDeviceToHost));
 
   // retrieve stem offset x
-  HANDLE_ERROR(cudaMemcpy(result->ServeStemOffsetXBuffer(this->stem_offset_output_width_, this->stem_offset_output_height_),
+  HANDLE_ERROR(cudaMemcpy(result.ServeStemOffsetXBuffer(this->stem_offset_output_width_, this->stem_offset_output_height_),
                           this->device_buffers_[this->stem_offset_output_binding_index_],
                           4*this->stem_offset_output_width_*this->stem_offset_output_height_,
                           cudaMemcpyDeviceToHost));
 
   // retrieve stem offset y
-  HANDLE_ERROR(cudaMemcpy(result->ServeStemOffsetYBuffer(this->stem_offset_output_width_, this->stem_offset_output_height_),
+  HANDLE_ERROR(cudaMemcpy(result.ServeStemOffsetYBuffer(this->stem_offset_output_width_, this->stem_offset_output_height_),
                           this->device_buffers_[this->stem_offset_output_binding_index_]
                           +4*this->stem_offset_output_width_*this->stem_offset_output_height_,
                           4*this->stem_offset_output_width_*this->stem_offset_output_height_,
                           cudaMemcpyDeviceToHost));
 
+  #ifdef DEBUG_MODE
+  double data_host_transfer_time = stop_watch.ElapsedTime();
+  ROS_INFO("Transfer data to host: %f ms (%f fps)", 1000.0*data_host_transfer_time, 1.0/data_transfer_time);
+  #endif // DEBUG_MODE
+
   context->destroy();
 
   // postprocessing
-  this->kStemInference_.Infer(result);
+  this->kSemanticLabeler_.Infer(result);
+  this->kStemExtractor_.Infer(result);
 
   #endif // TENSORRT_AVAILABLE
 }

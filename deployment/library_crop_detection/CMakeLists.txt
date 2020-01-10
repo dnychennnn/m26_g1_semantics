@@ -222,14 +222,19 @@ endif(TORCH_AVAILABLE)
 ## Declare a C++ library
 
 add_library(${PROJECT_NAME}
+  src/network_output.cpp
+  src/stem_extractor.cpp
+  src/semantic_labeler.cpp
   src/tensorrt_network.cpp
   src/pytorch_network.cpp
-  src/network_inference.cpp
-  src/opencv_stem_inference.cpp
 )
 
 add_library(stop_watch
   src/stop_watch.cpp
+)
+
+add_library(visualization
+  src/network_output_visualizer.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}
@@ -237,6 +242,7 @@ target_link_libraries(${PROJECT_NAME}
   ${OpenCV_LIBS}
   Boost::filesystem
   stop_watch
+  visualization
 )
 
 if(TENSORRT_AVAILABLE)

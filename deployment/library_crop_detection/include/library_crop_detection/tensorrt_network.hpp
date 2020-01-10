@@ -17,8 +17,9 @@
 #include <NvInfer.h>
 #endif // TENSORRT_AVAILABLE
 
-#include "network.hpp"
-#include "opencv_stem_inference.hpp"
+#include "library_crop_detection/network.hpp"
+#include "library_crop_detection/semantic_labeler.hpp"
+#include "library_crop_detection/stem_extractor.hpp"
 
 namespace igg {
 
@@ -44,14 +45,16 @@ public:
    */
   TensorrtNetwork();
 
-  TensorrtNetwork(const NetworkParameters& kParameters);
+  TensorrtNetwork(const NetworkParameters& kNetworkParameters,
+      const SemanticLabelerParameters& kSemanticLabelerParameters,
+      const StemExtractorParameters& kStemExtractorParameters);
 
   ~TensorrtNetwork();
 
   /*!
    * See igg::Network::Infer.
    */
-  void Infer(NetworkInference* result, const cv::Mat& kImage, const bool kMinimalInference) override;
+  void Infer(NetworkOutput& result, const cv::Mat& kImage) override;
 
   /*!
    * See igg::Network::IsReadyToInfer.
@@ -100,12 +103,13 @@ private:
   void* host_buffer_ = nullptr; // for input only, memory for results is provided by igg::NetworkInference
   std::vector<void*> device_buffers_; // one for each binding
 
-  const OpencvStemInference kStemInference_;
-
   #ifdef TENSORRT_AVAILABLE
   TensorrtNetworkLogger logger_;
   nvinfer1::ICudaEngine* engine_ = nullptr;
   #endif // TENSORRT_AVAILABLE
+
+  const SemanticLabeler kSemanticLabeler_;
+  const StemExtractor kStemExtractor_;
 
   /*!
    * Loads and already buildt engine from file.
@@ -122,11 +126,6 @@ private:
    * Throws a std::runtime_error if no engine is loaded.
    */
   void ReadBindingsAndAllocateBufferMemory();
-
-  /*
-   * Used to ensure the provided inference object has all the memory we need.
-   */
-  void PrepareInferenceMemory(NetworkInference* inference, const bool kMinimalInference);
 
   void FreeBufferMemory();
 };

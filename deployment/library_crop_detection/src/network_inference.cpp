@@ -42,6 +42,12 @@ void* NetworkInference::ServeStemOffsetYBuffer(const int kWidth, const int kHeig
 }
 
 
+void* NetworkInference::ServeVotesBuffer(const int kWidth, const int kHeight) {
+  this->votes_.create(kHeight, kWidth, CV_32FC1);
+  return static_cast<void*>(this->votes_.ptr());
+}
+
+
 cv::Mat NetworkInference::InputImage() {
   return this->input_image_; // copies the cv::Mat head only
 }
@@ -124,6 +130,7 @@ cv::Mat NetworkInference::SemanticClassConfidence(const int kClassIndex) {
   return this->semantic_class_confidences_[kClassIndex]; // copy the cv::Mat head here
 }
 
+
 cv::Mat NetworkInference::SemanticClassConfidenceAsUint8(const int kClassIndex) {
   cv::Mat confidence = this->SemanticClassConfidence(kClassIndex);
   cv::Mat confidence_converted;
@@ -145,6 +152,24 @@ cv::Mat NetworkInference::StemOffsetX() {
 
 cv::Mat NetworkInference::StemOffsetY() {
   return this->stem_offset_y_; // copies the cv::Mat head only
+}
+
+
+cv::Mat NetworkInference::Votes() {
+  return this->votes_; // copies the cv::Mat head only
+}
+
+
+void NetworkInference::SetVotes(const cv::Mat& votes) {
+  this->votes_ = votes;
+}
+
+
+cv::Mat NetworkInference::VotesAsUint8() {
+  cv::Mat votes_converted = this->votes_;
+  votes_converted *= 255.0;
+  votes_converted.convertTo(votes_converted, CV_8UC1);
+  return votes_converted;
 }
 
 
