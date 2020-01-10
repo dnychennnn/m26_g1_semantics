@@ -40,15 +40,13 @@ private:
 
 class TensorrtNetwork: public Network {
 public:
-  /*!
-   * Constructor.
-   */
-  TensorrtNetwork();
-
   TensorrtNetwork(const NetworkParameters& kNetworkParameters,
       const SemanticLabelerParameters& kSemanticLabelerParameters,
       const StemExtractorParameters& kStemExtractorParameters);
 
+  /*!
+   * Destructor.
+   */
   ~TensorrtNetwork();
 
   /*!

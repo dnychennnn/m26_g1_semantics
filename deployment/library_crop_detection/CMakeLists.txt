@@ -13,6 +13,11 @@ message(STATUS "Enable build with CUDA: ${CUDA_ENABLED}")
 message(STATUS "Enable build with TensorRT: ${TENSORRT_ENABLED}")
 message(STATUS "Enable build with Torch: ${TORCH_ENABLED}")
 
+## Warnings and optimaization
+set(CMAKE_CXX_FLAGS "-Wall -Wextra")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
+#set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
 ## Build type is debug by default
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Debug)
@@ -24,11 +29,6 @@ if(${CMAKE_BUILD_TYPE} MATCHES Debug)
   add_definitions(-DDEBUG_MODE)
   message(STATUS "Build with debug option.")
 endif()
-
-## Warnings and optimaization
-# set(CMAKE_CXX_FLAGS "-Wall -Wextra")
-set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -227,22 +227,14 @@ add_library(${PROJECT_NAME}
   src/semantic_labeler.cpp
   src/tensorrt_network.cpp
   src/pytorch_network.cpp
-)
-
-add_library(stop_watch
-  src/stop_watch.cpp
-)
-
-add_library(visualization
   src/network_output_visualizer.cpp
+  src/stop_watch.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}
   ${OpenCV_LIBS}
   Boost::filesystem
-  stop_watch
-  visualization
 )
 
 if(TENSORRT_AVAILABLE)

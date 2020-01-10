@@ -96,7 +96,6 @@ const cv::Mat& NetworkOutput::Votes() const {
 
 void NetworkOutput::SetStemPositions(std::vector<cv::Vec3f>&& stem_positions) {
   this->stem_positions_ = stem_positions;
-  std::cout << this->stem_positions_.size();
 }
 
 

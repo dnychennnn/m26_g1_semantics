@@ -13,6 +13,7 @@
 #include <opencv2/core.hpp>
 
 #include "library_crop_detection/network_output.hpp"
+#include "library_crop_detection/semantic_labeler.hpp"
 #include "library_crop_detection/stem_extractor.hpp"
 
 namespace igg {
@@ -25,6 +26,8 @@ struct NetworkParameters {
 
 class Network {
 public:
+  virtual ~Network() {}
+
   /*!
    * Perfoms plant detection on the given image.
    *

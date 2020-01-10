@@ -70,13 +70,9 @@ cv::Mat NetworkOutputVisualizer::MakeVisualization(
     cv::line(markers, cv::Point(x+this->kMarkerRadius_, y), cv::Point(x+this->kMarkerRadius_-10, y), color, thickness);
     cv::line(markers, cv::Point(x-this->kMarkerRadius_, y), cv::Point(x-this->kMarkerRadius_+10, y), color, thickness);
 
-      cv::putText(markers,
-            std::to_string(kPosition[2]),
-            cv::Point(x+this->kMarkerRadius_, y+this->kMarkerRadius_),
-            cv::FONT_HERSHEY_SIMPLEX,
-            0.5,
-            cv::Scalar(1.0, 1.0, 1.0),
-            1);
+    cv::putText(markers, std::to_string(kPosition[2]),
+        cv::Point(x+this->kMarkerRadius_, y+this->kMarkerRadius_),
+        cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(1.0, 1.0, 1.0), 1);
   }
 
   plot += 0.5*markers;
@@ -185,7 +181,7 @@ cv::Mat NetworkOutputVisualizer::MakeKeypointsVisualization(
 
   for(int x=0; x<kStemKeypointConfidence.cols; x+=4) {
     for(int y=0; y<kStemKeypointConfidence.rows; y+=4) {
-      if (kStemKeypointConfidence.at<float>(y, x)>0.5) {
+      if (kStemKeypointConfidence.at<float>(y, x)>0.1) {
         scaled_x = static_cast<int>(std::round(scaling_x*static_cast<float>(x)));
         scaled_y = static_cast<int>(std::round(scaling_y*static_cast<float>(y)));
         offset_x = scaled_x+static_cast<int>(std::round(15.0*scaling_x*kOffsetX.at<float>(y, x)));
