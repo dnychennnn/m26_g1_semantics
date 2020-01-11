@@ -1,24 +1,25 @@
 /*!
  * @file crop_detection.cpp
  *
- * @author Jan Quakernack
  * @version 0.1
  */
 
 #include "ros_crop_detection/crop_detection.hpp"
 
 #include <vector>
-#include <iomanip> // For formatted output
+#include <string>
 
 #include <cv_bridge/cv_bridge.h>
 
 #include <boost/bind.hpp>
 #include <opencv2/opencv.hpp>
 
-#include "library_crop_detection/tensorrt_common.hpp"
+#include "library_crop_detection/tensorrt_network.hpp"
+#include "library_crop_detection/pytorch_network.hpp"
+#include "library_crop_detection/network_output.hpp"
 
 // Custom message wrapping around predicted stem positions
-#include "ros_crop_detection/StemInference.h"
+#include "ros_crop_detection/StemPositions.h"
 
 
 namespace igg {
@@ -28,7 +29,10 @@ namespace fs = boost::filesystem;
 CropDetection::CropDetection(ros::NodeHandle& node_handle,
                              const std::string& kRgbImageTopic,
                              const std::string& kNirImageTopic,
-                             const std::string& kPathToModelFile):
+                             const std::string& kArchitectureName,
+                             const NetworkParameters& kNetworkParameters,
+                             const SemanticLabelerParameters& kSemanticLabelerParameters,
+                             const StemExtractorParameters& kStemExtractorParameters):
       node_handle_{node_handle},
       rgb_image_subscriber_{this->node_handle_, kRgbImageTopic, 1},
       nir_image_subscriber_{this->node_handle_, kNirImageTopic, 1},
@@ -42,33 +46,52 @@ CropDetection::CropDetection(ros::NodeHandle& node_handle,
   // Advertise network output topic
   image_transport::ImageTransport transport(this->node_handle_);
 
-  this->network_input_image_publisher_ = transport.advertise("input_image", 1);
-  this->network_background_confidence_publisher_ = transport.advertise("background_confidence", 1);
-  this->network_weed_confidence_publisher_ = transport.advertise("weed_confidence", 1);
-  this->network_sugar_beet_confidence_publisher_ = transport.advertise("sugar_beet_confidence", 1);
-  this->network_semantic_class_labels_publisher_ = transport.advertise("semantic_class_labels", 1);
-  this->network_visualization_publisher_ = transport.advertise("visualization", 1);
+  this->semantic_labels_publisher_ = transport.advertise("semantic_labels", 1);
+  this->stem_positions_publisher_ = this->node_handle_.advertise<ros_crop_detection::StemPositions>("stem_positions", 1);
 
-  this->stem_inference_publisher_ = this->node_handle_.advertise<ros_crop_detection::StemInference>("stem_inference", 1);
+  this->input_bgr_publisher_ = transport.advertise("input_bgr", 1);
+  this->input_nir_publisher_ = transport.advertise("input_nir", 1);
+  this->input_false_color_publisher_ = transport.advertise("input_false_color", 1);
+
+  this->visualization_publisher_ = transport.advertise("visualization", 1);
+  this->visualization_semantics_publisher_ = transport.advertise("visualization_semantics", 1);
+  this->visualization_keypoints_publisher_ = transport.advertise("visualization_keypoints", 1);
+  this->visualization_votes_publisher_ = transport.advertise("visualization_votes", 1);
 
   try {
-    ROS_INFO("Init network.");
-    // this->network_ = std::make_unique<TensorrtNetwork>(NetworkParameters());
-    // TODO sometimes results in a runtime error: 'free(): invalid pointer'
-    this->network_.Load(kPathToModelFile+".onnx", false); // false as we do not enforce rebuilding the model
-  } catch (const TensorrtNotAvailableException& kError) {
-    // TODO Attempt to load pytorch model.
-    ROS_ERROR("Cannot initialize TensorRT network because this is a build without TensorRT. "
-              "Shutdown.");
-    ros::requestShutdown();
+    ROS_INFO("Attempt to init TensorRT network.");
+    if (this->network_) {this->network_.reset();}
+    this->network_ = std::make_unique<TensorrtNetwork>(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
+    this->network_->Load((Network::ModelsDir()/(kArchitectureName+".onnx")).string(), false); // false as we do not enforce rebuilding the model
+  } catch (const std::exception& kError) {
+    ROS_WARN("Cannot init TensorRT network ('%s'). Trying Torch.", kError.what());
+    try {
+      if (this->network_) {this->network_.reset();}
+      this->network_ = std::make_unique<PytorchNetwork>(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
+      this->network_->Load((Network::ModelsDir()/(kArchitectureName+".pt")).string(), false);
+    } catch (const std::exception& kError) {
+      ROS_ERROR("Cannot initialize any network ('%s'). Shutdown.", kError.what());
+      ros::requestShutdown();
+    }
   }
 }
+
+
+CropDetection::~CropDetection() {
+
+}
+
 
 void CropDetection::Callback(const sensor_msgs::ImageConstPtr& kRgbImageMessage,
                              const sensor_msgs::ImageConstPtr& kNirImageMessage) {
   ROS_INFO("Crop detection callback.");
 
-  if (!this->network_.IsReadyToInfer()) {
+  if (!this->network_) {
+    ROS_WARN("Received image, but network is not initialized.");
+    return;
+  }
+
+  if (!this->network_->IsReadyToInfer()) {
     ROS_WARN("Received image, but network is not loaded.");
     return;
   }
@@ -85,11 +108,6 @@ void CropDetection::Callback(const sensor_msgs::ImageConstPtr& kRgbImageMessage,
     return;
   }
 
-  // Show images
-  //cv::imshow("RGB", rgb_image->image);
-  //cv::imshow("NIR", nir_image->image);
-  //cv::waitKey();
-
   // BGR to RGB
   cv::Mat rgb_image;
   cv::cvtColor(rgb_image_ptr->image, rgb_image, cv::COLOR_BGR2RGB);
@@ -101,52 +119,79 @@ void CropDetection::Callback(const sensor_msgs::ImageConstPtr& kRgbImageMessage,
   cv::Mat rgb_nir_image;
   cv::merge(channels, rgb_nir_image);
 
-  igg::NetworkInference result;
-  this->network_.Infer(&result, rgb_nir_image, false);
+  igg::NetworkOutput result;
+  this->network_->Infer(result, rgb_nir_image);
 
   // Put network output into messages
 
   // Same header with timestamp as input
   std_msgs::Header header = kRgbImageMessage->header;
 
-  sensor_msgs::ImagePtr input_image = cv_bridge::CvImage(header, "bgr8", result.InputImageAsBgr()).toImageMsg();
-  sensor_msgs::ImagePtr background_confidence = cv_bridge::CvImage(header, "mono8", result.SemanticClassConfidence(0)).toImageMsg();
-  sensor_msgs::ImagePtr weed_confidence = cv_bridge::CvImage(header, "", result.SemanticClassConfidence(1)).toImageMsg();
-  sensor_msgs::ImagePtr sugar_beet_confidence = cv_bridge::CvImage(header, "", result.SemanticClassConfidence(2)).toImageMsg();
-  sensor_msgs::ImagePtr semantic_class_labels = cv_bridge::CvImage(header, "", result.SemanticClassLabels()).toImageMsg();
-  sensor_msgs::ImagePtr visualization = cv_bridge::CvImage(header, "bgr8", result.MakePlot()).toImageMsg();
+  sensor_msgs::ImagePtr semantic_labels = cv_bridge::CvImage(
+      header, "mono8", result.SemanticClassLabels()).toImageMsg();
+  this->semantic_labels_publisher_.publish(semantic_labels);
 
-  this->network_input_image_publisher_.publish(input_image);
-  this->network_background_confidence_publisher_.publish(background_confidence);
-  this->network_weed_confidence_publisher_.publish(weed_confidence);
-  this->network_sugar_beet_confidence_publisher_.publish(sugar_beet_confidence);
-  this->network_semantic_class_labels_publisher_.publish(semantic_class_labels);
-  this->network_visualization_publisher_.publish(visualization);
-
-  const std::vector<cv::Vec2f> kStemPositions = result.StemPositions();
-
-  ros_crop_detection::StemInference stem_inference_message;
-  stem_inference_message.header = header;
+  const std::vector<cv::Vec3f>& kStemPositions = result.StemPositions();
+  ros_crop_detection::StemPositions stem_positions_message;
+  stem_positions_message.header = header;
 
   // Copy positions into message
   for(const auto kPosition: kStemPositions) {
     geometry_msgs::Point message_position;
     message_position.x = kPosition[0];
     message_position.y = kPosition[1];
-    message_position.z = 0.0; // geometry_msgs does not have a 2D Point. Prefer using the 3D Point over an own point message.
-
-    stem_inference_message.positions.push_back(message_position);
+    message_position.z = kPosition[2]; // confidence
+    stem_positions_message.positions.emplace_back(message_position);
   }
 
-  this->stem_inference_publisher_.publish(stem_inference_message);
+  this->stem_positions_publisher_.publish(stem_positions_message);
 
-  //cv::imshow("input_image", result.InputImageAsFalseColorBgr());
-  //cv::imshow("background_confidence", result.SemanticClassConfidence(0));
-  //cv::imshow("weed_confidence", result.SemanticClassConfidence(1));
-  //cv::imshow("sugar_beet_confidence", result.SemanticClassConfidence(2));
-  //cv::imshow("stem_keypoint_confidence", result.StemKeypointConfidence());
-  //cv::imshow("all", result.MakePlot());
-  //cv::waitKey(1);
+  // Publish visualizations in debug mode
+  #ifdef DEBUG_MODE
+
+  if (this->input_bgr_publisher_.getNumSubscribers()>0) {
+    sensor_msgs::ImagePtr input_bgr = cv_bridge::CvImage(
+        header, "bgr8", this->kVisualizer_.MakeInputBgrVisualization(result)).toImageMsg();
+    this->input_bgr_publisher_.publish(input_bgr);
+  }
+
+  if (this->input_nir_publisher_.getNumSubscribers()>0) {
+    sensor_msgs::ImagePtr input_nir = cv_bridge::CvImage(
+        header, "bgr8", this->kVisualizer_.MakeInputNirVisualization(result)).toImageMsg();
+    this->input_nir_publisher_.publish(input_nir);
+  }
+
+  if (this->input_false_color_publisher_.getNumSubscribers()>0) {
+    sensor_msgs::ImagePtr input_false_color = cv_bridge::CvImage(
+        header, "bgr8", this->kVisualizer_.MakeInputFalseColorVisualization(result)).toImageMsg();
+    this->input_false_color_publisher_.publish(input_false_color);
+  }
+
+  if (this->visualization_publisher_.getNumSubscribers()>0) {
+    sensor_msgs::ImagePtr visualization = cv_bridge::CvImage(
+        header, "bgr8", this->kVisualizer_.MakeVisualization(result)).toImageMsg();
+    this->visualization_publisher_.publish(visualization);
+  }
+
+  if (this->visualization_semantics_publisher_.getNumSubscribers()>0) {
+    sensor_msgs::ImagePtr visualization_semantics = cv_bridge::CvImage(
+        header, "bgr8", this->kVisualizer_.MakeSemanticsVisualization(result)).toImageMsg();
+    this->visualization_semantics_publisher_.publish(visualization_semantics);
+  }
+
+  if (this->visualization_keypoints_publisher_.getNumSubscribers()>0) {
+    sensor_msgs::ImagePtr visualization_keypoints = cv_bridge::CvImage(
+        header, "bgr8", this->kVisualizer_.MakeKeypointsVisualization(result)).toImageMsg();
+    this->visualization_keypoints_publisher_.publish(visualization_keypoints);
+  }
+
+  if (this->visualization_votes_publisher_.getNumSubscribers()>0) {
+    sensor_msgs::ImagePtr visualization_votes = cv_bridge::CvImage(
+        header, "bgr8", this->kVisualizer_.MakeVotesVisualization(result)).toImageMsg();
+    this->visualization_votes_publisher_.publish(visualization_votes);
+  }
+
+  #endif // DEBUG_MODE
 }
 
 } // namespace igg

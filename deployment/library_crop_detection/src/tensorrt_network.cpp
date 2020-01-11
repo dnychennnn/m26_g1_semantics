@@ -3,7 +3,6 @@
  *
  * Reference: https://github.com/PRBonn/bonnetal/blob/master/deploy/src/segmentation/lib/src/netTensorRT.cpp
  *
- * @author Jan Quakernack
  * @version 0.1
  */
 
@@ -16,15 +15,20 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 
-#include <time.h>
-
 #ifdef TENSORRT_AVAILABLE
 #include <cuda_runtime_api.h>
 #include <NvOnnxParser.h>
 #include <NvInferRuntime.h>
 #endif // TENSORRT_AVAILABLE
 
+#ifdef DEBUG_MODE
+#include <ros/console.h>
+#include "library_crop_detection/stop_watch.hpp"
+#endif // DEBUG_MODE
+
+#ifdef CUDA_AVAILABLE
 #include "handle_cuda_error.hpp"
+#endif // CUDA_AVAILABLE
 
 
 namespace igg {
@@ -32,14 +36,14 @@ namespace igg {
 namespace fs = boost::filesystem;
 
 
-TensorrtNetwork::TensorrtNetwork():
-    mean_{0.386, 0.227, 0.054, 0.220}, std_{0.124, 0.072, 0.0108, 0.066} {
-  ASSERT_TENSORRT_AVAILABLE;
-}
-
-
-TensorrtNetwork::TensorrtNetwork(const NetworkParameters& kParameters):
-    mean_{kParameters.mean}, std_{kParameters.std}, kStemInference_{OpencvStemInference({kParameters})} {
+TensorrtNetwork::TensorrtNetwork(
+    const NetworkParameters& kNetworkParameters,
+    const SemanticLabelerParameters& kSemanticLabelerParameters,
+    const StemExtractorParameters& kStemExtractorParameters):
+    mean_{kNetworkParameters.mean},
+    std_{kNetworkParameters.std},
+    kSemanticLabeler_{SemanticLabeler(kSemanticLabelerParameters)},
+    kStemExtractor_{StemExtractor(kStemExtractorParameters)} {
   ASSERT_TENSORRT_AVAILABLE;
 }
 
@@ -47,32 +51,54 @@ TensorrtNetwork::TensorrtNetwork(const NetworkParameters& kParameters):
 TensorrtNetwork::~TensorrtNetwork() {
   ASSERT_TENSORRT_AVAILABLE;
   #ifdef TENSORRT_AVAILABLE
-  if(this->engine_){this->engine_->destroy();}
+  if(this->context_){this->context_->destroy(); this->context_ = nullptr;}
+  if(this->engine_){this->engine_->destroy(); this->engine_ = nullptr;}
   this->FreeBufferMemory();
   #endif // TENSORRT_AVAILABLE
 }
 
 
-void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, const bool kMinimalInference) {
+void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
   ASSERT_TENSORRT_AVAILABLE;
   #ifdef TENSORRT_AVAILABLE
+
+  #ifdef DEBUG_MODE
+  // measure inference time in debug mode
+  StopWatch stop_watch;
+  #endif // DEBUG_MODE
 
   if (!this->engine_) {
     throw std::runtime_error("No engine loaded.");
   }
 
-  auto context = this->engine_->createExecutionContext();
-  if (!context) {
+  if (!this->context_) {
+    this->context_ = this->engine_->createExecutionContext();
+  }
+
+  if (!this->context_) {
     throw std::runtime_error("Could not create execution context.");
   }
+
+  #ifdef DEBUG_MODE
+  stop_watch.Start();
+  #endif // DEBUG_MODE
 
   // resize input image to network input size
   cv::Mat input;
   cv::resize(kImage, input, cv::Size(this->input_width_, this->input_height_));
 
   // return resized image as well
-  std::memcpy(result->ServeInputImageBuffer(this->input_width_, this->input_height_),
+  std::memcpy(result.ServeInputImageBuffer(this->input_width_, this->input_height_),
       input.ptr(), 4*this->input_width_*this->input_height_);
+
+  #ifdef DEBUG_MODE
+  double scale_time = stop_watch.ElapsedTime();
+  ROS_INFO("Scale network input: %f ms (%f fps)", 1000.0*scale_time, 1.0/scale_time);
+  #endif // DEBUG_MODE
+
+  #ifdef DEBUG_MODE
+  stop_watch.Start();
+  #endif // DEBUG_MODE
 
   // to float
   input.convertTo(input, CV_32F);
@@ -88,67 +114,70 @@ void TensorrtNetwork::Infer(NetworkInference* result, const cv::Mat& kImage, con
     }
   );
 
-  // TODO use asynchronus memcopy as in bonnetal
+  #ifdef DEBUG_MODE
+  double normalization_time = stop_watch.ElapsedTime();
+  ROS_INFO("Normalize network input: %f ms (%f fps)", 1000.0*normalization_time, 1.0/normalization_time);
+  #endif // DEBUG_MODE
+
+  #ifdef DEBUG_MODE
+  stop_watch.Start();
+  #endif // DEBUG_MODE
+
+  // use a separate cuda stream
+  cudaStream_t stream;
+  HANDLE_ERROR(cudaStreamCreate(&stream));
 
   // transfer to device
-  HANDLE_ERROR(cudaMemcpy(this->device_buffers_[this->input_binding_index_],
-                          this->host_buffer_,
-                          4*this->input_width_*this->input_height_*this->input_channels_,
-                          cudaMemcpyHostToDevice));
-
-  #ifdef DEBUG_MODE
-  // stop watch code provided by Marcell Missura
-  struct timespec last;
-  clock_gettime(CLOCK_MONOTONIC, &last);
-  #endif // DEBUG_MODE
+  HANDLE_ERROR(cudaMemcpyAsync(this->device_buffers_[this->input_binding_index_],
+                               this->host_buffer_,
+                               4*this->input_width_*this->input_height_*this->input_channels_,
+                               cudaMemcpyHostToDevice,
+                               stream));
 
   // pass through network
-  context->executeV2(&((this->device_buffers_)[this->input_binding_index_])); // version 2 is without batch size
-  HANDLE_ERROR(cudaDeviceSynchronize());
-
-  #ifdef DEBUG_MODE
-  struct timespec now;
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  long diff_in_secs = now.tv_sec - last.tv_sec;
-  long diff_in_nanos = now.tv_nsec - last.tv_nsec;
-  double time = (double)diff_in_secs + (double)diff_in_nanos/1000000000;
-  std::cout << "Network inference time: " << time << "s (" << 1.0/time << "fps)\n";
-  #endif // DEBUG_MODE
-
-  // transfer back to host
+  cudaEvent_t event_input_consumed; // triggered when buffer can be refilled, not used here
+  HANDLE_ERROR(cudaEventCreate(&event_input_consumed));
+  this->context_->enqueueV2(&((this->device_buffers_)[this->input_binding_index_]), stream, &event_input_consumed); // version 2 is without batch size
 
   // retrieve semantic class confidences
   for(int class_index=0; class_index<this->semantic_output_channels_; class_index++) {
-    HANDLE_ERROR(cudaMemcpy(result->ServeSemanticClassConfidenceBuffer(class_index, this->semantic_output_width_, this->semantic_output_height_),
-                            this->device_buffers_[this->semantic_output_binding_index_]
-                            +4*class_index*this->semantic_output_height_*this->semantic_output_width_,
-                            4*this->semantic_output_width_*this->semantic_output_height_,
-                            cudaMemcpyDeviceToHost));
+    HANDLE_ERROR(cudaMemcpyAsync(result.ServeSemanticClassConfidenceBuffer(class_index, this->semantic_output_width_, this->semantic_output_height_),
+                                 this->device_buffers_[this->semantic_output_binding_index_]
+                                 +4*class_index*this->semantic_output_height_*this->semantic_output_width_,
+                                 4*this->semantic_output_width_*this->semantic_output_height_,
+                                 cudaMemcpyDeviceToHost, stream));
   }
 
   // retrieve stem keypoint confidence
-  HANDLE_ERROR(cudaMemcpy(result->ServeStemKeypointConfidenceBuffer(this->stem_keypoint_output_width_, this->stem_keypoint_output_height_),
-                          this->device_buffers_[this->stem_keypoint_output_binding_index_],
-                          4*this->stem_keypoint_output_width_*this->stem_keypoint_output_height_*this->stem_keypoint_output_channels_,
-                          cudaMemcpyDeviceToHost));
+  HANDLE_ERROR(cudaMemcpyAsync(result.ServeStemKeypointConfidenceBuffer(this->stem_keypoint_output_width_, this->stem_keypoint_output_height_),
+                               this->device_buffers_[this->stem_keypoint_output_binding_index_],
+                               4*this->stem_keypoint_output_width_*this->stem_keypoint_output_height_*this->stem_keypoint_output_channels_,
+                               cudaMemcpyDeviceToHost, stream));
 
   // retrieve stem offset x
-  HANDLE_ERROR(cudaMemcpy(result->ServeStemOffsetXBuffer(this->stem_offset_output_width_, this->stem_offset_output_height_),
-                          this->device_buffers_[this->stem_offset_output_binding_index_],
-                          4*this->stem_offset_output_width_*this->stem_offset_output_height_,
-                          cudaMemcpyDeviceToHost));
+  HANDLE_ERROR(cudaMemcpyAsync(result.ServeStemOffsetXBuffer(this->stem_offset_output_width_, this->stem_offset_output_height_),
+                               this->device_buffers_[this->stem_offset_output_binding_index_],
+                               4*this->stem_offset_output_width_*this->stem_offset_output_height_,
+                               cudaMemcpyDeviceToHost, stream));
 
   // retrieve stem offset y
-  HANDLE_ERROR(cudaMemcpy(result->ServeStemOffsetYBuffer(this->stem_offset_output_width_, this->stem_offset_output_height_),
-                          this->device_buffers_[this->stem_offset_output_binding_index_]
-                          +4*this->stem_offset_output_width_*this->stem_offset_output_height_,
-                          4*this->stem_offset_output_width_*this->stem_offset_output_height_,
-                          cudaMemcpyDeviceToHost));
+  HANDLE_ERROR(cudaMemcpyAsync(result.ServeStemOffsetYBuffer(this->stem_offset_output_width_, this->stem_offset_output_height_),
+                               this->device_buffers_[this->stem_offset_output_binding_index_]
+                               +4*this->stem_offset_output_width_*this->stem_offset_output_height_,
+                               4*this->stem_offset_output_width_*this->stem_offset_output_height_,
+                               cudaMemcpyDeviceToHost, stream));
 
-  context->destroy();
+  HANDLE_ERROR(cudaStreamSynchronize(stream));
+  HANDLE_ERROR(cudaStreamDestroy(stream));
+
+  #ifdef DEBUG_MODE
+  double inference_time = stop_watch.ElapsedTime();
+  ROS_INFO("Network inference time (including data transfer): %f ms (%f fps)", 1000.0*inference_time, 1.0/inference_time);
+  #endif // DEBUG_MODE
 
   // postprocessing
-  this->kStemInference_.Infer(result);
+  this->kSemanticLabeler_.Infer(result);
+  this->kStemExtractor_.Infer(result);
 
   #endif // TENSORRT_AVAILABLE
 }
@@ -184,6 +213,9 @@ void TensorrtNetwork::Load(const std::string& kFilepath, const bool kForceRebuil
     auto parser = nvonnxparser::createParser(*network, this->logger_);
     if(!parser->parseFromFile(kFilepath.c_str(),
          static_cast<int>(this->logger_.getReportableSeverity()))){
+      if (parser) {parser->destroy(); parser = nullptr;}
+      if (builder) {builder->destroy(); builder = nullptr;}
+      if (network) {network->destroy(); network = nullptr;}
       throw std::runtime_error("Cannnot parse model file: '"+kFilepath+"'");
     }
 
@@ -191,22 +223,22 @@ void TensorrtNetwork::Load(const std::string& kFilepath, const bool kForceRebuil
     auto config = builder->createBuilderConfig();
     config->setMaxWorkspaceSize(1<<20);
 
-    if(this->engine_){this->engine_->destroy();}
+    if(this->engine_){this->engine_->destroy(); this->engine_ = nullptr;}
     this->engine_ = builder->buildEngineWithConfig(*network, *config);
 
-    parser->destroy();
-    network->destroy();
-    config->destroy();
-    builder->destroy();
+    if (parser) {parser->destroy(); parser = nullptr;}
+    if (builder) {builder->destroy(); builder = nullptr;}
+    if (config) {config->destroy(); config = nullptr;}
+    if (network) {network->destroy(); network = nullptr;}
 
     // store model to disk
     auto serialized_model = this->engine_->serialize();
     if (!serialized_model) {
-      std::cerr << "Cannot serialize engine.\n";
+      std::cout << "Warning: Cannot serialize engine.\n";
     } else {
       std::ofstream serialized_model_output_file(kEngineFilepath, std::ios::binary);
       serialized_model_output_file.write(reinterpret_cast<const char*>(serialized_model->data()), serialized_model->size());
-      serialized_model->destroy();
+      serialized_model->destroy(); serialized_model = nullptr;
     }
   }
   this->ReadBindingsAndAllocateBufferMemory();
@@ -220,7 +252,7 @@ bool TensorrtNetwork::LoadSerialized(const std::string& kFilepath) {
 
   std::ifstream model_file(kFilepath, std::ios::binary);
   if (!model_file) {
-    std::cout << "Cannnot read model engine: '" << kFilepath << "'\n";
+    std::cout << "Warning: Cannnot read model engine: '" << kFilepath << "'\n";
     model_file.close();
     return false;
   }
@@ -232,45 +264,32 @@ bool TensorrtNetwork::LoadSerialized(const std::string& kFilepath) {
   model_stream << model_file.rdbuf();
   model_file.close();
 
-  //std::cout << "Closed file." << std::endl;
-
   model_stream.seekg(0, std::ios::end);
   const size_t kModelSize = model_stream.tellg();
   model_stream.seekg(0, std::ios::beg);
 
-  //std::cout << "Model size: " << kModelSize << std::endl;
-
   void* model_memory = malloc(kModelSize);
   if (!model_memory) {
-    std::cerr << "Cannot allocate memory to load serialized model.\n";
+    std::cout << "Warning: Cannot allocate memory to load serialized model.\n";
     return false;
   }
 
-  //std::cout << "Allocated." << std::endl;
-
   model_stream.read(reinterpret_cast<char*>(model_memory), kModelSize);
 
-  //std::cout << "Read." << std::endl;
-
-  if (this->engine_) {this->engine_->destroy();}
-
-  //std::cout << "Create runtime." << std::endl;
+  if (this->engine_) {this->engine_->destroy(); this->engine_ = nullptr;}
 
   nvinfer1::IRuntime* runtime = nvinfer1::createInferRuntime(this->logger_);
 
   if (!runtime) {
-    std::cerr << "Could not create runtime." << std::endl;
+    std::cout << "Warning: Cannot not create runtime." << std::endl;
+    if (model_memory) {free(model_memory); model_memory=nullptr;}
     return false;
   }
 
   this->engine_ = runtime->deserializeCudaEngine(model_memory, kModelSize, nullptr);
 
-  //std::cout << "Serialized." << std::endl;
-
-  free(model_memory);
-  runtime->destroy();
-
-  //std::cout << "Freed." << std::endl;
+  if (model_memory) {free(model_memory); model_memory = nullptr;}
+  if (runtime) {runtime->destroy(); runtime = nullptr;};
 
   return true;
   #endif // TENSORRT_AVAILABLE
@@ -362,6 +381,7 @@ void TensorrtNetwork::ReadBindingsAndAllocateBufferMemory() {
     throw std::runtime_error("Expected binding to have two channels: 'stem_offset_output'");
   }
 
+  /*
   if (!(this->input_width_==this->semantic_output_width_
         && this->input_width_==this->stem_keypoint_output_width_
         && this->input_width_==this->stem_offset_output_width_
@@ -370,6 +390,7 @@ void TensorrtNetwork::ReadBindingsAndAllocateBufferMemory() {
         && this->input_height_==this->stem_offset_output_height_)) {
     throw std::runtime_error("Expect all inputs and ouputs to have the same height and width.");
   }
+  */
 
   if (!(this->input_channels_==this->mean_.size()
         &&this->input_channels_==this->std_.size())){
@@ -382,13 +403,18 @@ void TensorrtNetwork::ReadBindingsAndAllocateBufferMemory() {
 void TensorrtNetwork::FreeBufferMemory() {
   // host
   #ifdef TENSORRT_AVAILABLE
-  HANDLE_ERROR(cudaFreeHost(this->host_buffer_));
+  if (this->host_buffer_) {
+    HANDLE_ERROR(cudaFreeHost(this->host_buffer_)); this->host_buffer_ = nullptr;
+  }
   #endif // TENSORRT_AVAILABLE
 
   // device
-  for(void* buffer: this->device_buffers_) {
+  for(size_t buffer_index = 0; buffer_index<this->device_buffers_.size(); buffer_index++) {
     #ifdef TENSORRT_AVAILABLE
-    HANDLE_ERROR(cudaFree(buffer));
+    if (this->device_buffers_[buffer_index]) {
+      HANDLE_ERROR(cudaFree(this->device_buffers_[buffer_index]));
+      this->device_buffers_[buffer_index] = nullptr;
+    }
     #endif // TENSORRT_AVAILABLE
   }
   this->device_buffers_.clear();

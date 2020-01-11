@@ -128,7 +128,7 @@ class Model(nn.Module):
         self.initial_conv_block = ConvBlock(input_channels=input_channels,
                                             output_channels=initial_conv_output_channels,
                                             kernel_size=initial_conv_kernel_size,
-                                            padding=initial_conv_kernel_size//2,
+                                            padding=(initial_conv_kernel_size-1)//2,
                                             stride=initial_conv_stride,
                                             activation='leaky_relu',
                                             dropout_rate=None)

@@ -21,16 +21,16 @@ class PytorchNetwork: public Network {
 
 public:
 
-  PytorchNetwork();
-
-  PytorchNetwork(const NetworkParameters& kParameters);
+  PytorchNetwork(const NetworkParameters& kNetworkParameters,
+      const SemanticLabelerParameters& kSemanticLabelerParameters,
+      const StemExtractorParameters& kStemExtractorParameters);
 
   ~PytorchNetwork();
 
   /*!
    * See igg::Network::Infer.
    */
-  void Infer(NetworkInference* result, const cv::Mat& kImage, const bool kMinimalInference) override;
+  void Infer(NetworkOutput& result, const cv::Mat& kImage) override;
 
   /*!
    * See igg::Network::IsReadyToInfer.
@@ -38,7 +38,7 @@ public:
   bool IsReadyToInfer() const override;
 
   /*!
-   * Expects a path to an '.onnx' file.
+   * Expects a path to an '.pt' file.
    *
    * See igg::Network::Load.
    */
@@ -52,22 +52,23 @@ public:
   int InputChannels() const override;
 
 private:
+  const std::vector<float> kMean_;
+  const std::vector<float> kStd_;
+
+  const SemanticLabeler kSemanticLabeler_;
+  const StemExtractor kStemExtractor_;
+
+  const int kInputWidth_;
+  const int kInputHeight_;
+  const int kInputChannels_;
+
   #ifdef TORCH_AVAILABLE
-  torch::jit::script::Module module_; // TODO maybe make this a (smart) pointer again
+  torch::jit::script::Module module_;
   #endif // TORCH_AVAILABLE
 
-  // TODO have height, width and channels in igg::NetworkParameters and read from there
-  int input_width_ = 432; //-1;
-  int input_height_ = 322; //-1;
-  int input_channels_ = 4; //-1;
-
-  std::vector<float> mean_;
-  std::vector<float> std_;
+  bool is_loaded_ = false;
 
   void* input_buffer_ = nullptr; // for input only, memory for results is provided by igg::NetworkInference
-
-  const OpencvStemInference kStemInference_;
-
 };
 
 } // namespace igg

@@ -1,10 +1,8 @@
 #ifndef M26_G1_SEMANTICS_DEPLOYMENT_LIBRARY_CROP_DETECTION_INCLUDE_NETWORK_INFERENCE_HPP_
 #define M26_G1_SEMANTICS_DEPLOYMENT_LIBRARY_CROP_DETECTION_INCLUDE_NETWORK_INFERENCE_HPP_
-
 /*!
  * @file network_inference.hpp
  *
- * @author Jan Quakernack
  * @version 0.1
  */
 
@@ -23,6 +21,7 @@ public:
   void* ServeStemKeypointConfidenceBuffer(const int kHeight, const int kWidth);
   void* ServeStemOffsetXBuffer(const int kHeight, const int kWidth);
   void* ServeStemOffsetYBuffer(const int kHeight, const int kWidth);
+  void* ServeVotesBuffer(const int kHeight, const int kWidth);
 
   /*!
    * Get the offloaded outputs as cv::Mat.
@@ -35,9 +34,17 @@ public:
   cv::Mat StemKeypointConfidence();
   cv::Mat StemOffsetX();
   cv::Mat StemOffsetY();
+  cv::Mat Votes();
 
   /*!
-   * Set the infered stem positions.
+   * Set accumulated votes for stem positions.
+   */
+  void SetVotes(const cv::Mat& votes);
+
+  /*!
+   * Set extracted stem positions.
+   *
+   * Note each stem has three components x, y and confidence accoring to the accumulated votes.
    */
   void SetStemPositions(const std::vector<cv::Vec2f>& kPositions);
 
@@ -59,6 +66,7 @@ public:
    * Helpers to get output as usigned 8 bit integer.
    */
   cv::Mat SemanticClassConfidenceAsUint8(const int kClassIndex);
+  cv::Mat VotesAsUint8();
 
   /*
    * Helpers for plotting.
@@ -72,6 +80,7 @@ private:
   cv::Mat stem_keypoint_confidence_;
   cv::Mat stem_offset_x_;
   cv::Mat stem_offset_y_;
+  cv::Mat votes_;
   std::vector<cv::Vec2f> stem_positions_;
 };
 

@@ -19,10 +19,14 @@ weight_stem_background: 1.0
 weight_stem: 10.0
 
 stem_inference_device_option: 'pytorch' # 'cuda' (= CUDA), 'cpu' (= Pytorch C++ API), 'pytorch' (= pytorch index_put)
+
+sugar_beet_threshold: 0.8 # confidence threshold to be assigned to this class
+weed_threshold: 0.8 # sugar beets treated with priority for thresholds <= 0.5
+
 stem_inference_threshold_votes: 0.001 # pixel with a keypoint confidence below this value do not cast votes at all
-stem_inference_threshold_peaks: 0.1 # 0.001 # only pixels with accumulated votes larger than this value are considered as stems
-stem_inference_kernel_size_votes: 5 # pixels also vote for neighbors within this window, should be odd
-stem_inference_kernel_size_peaks: 9 # non-maximum suppression for all peaks in this window, should be odd
+stem_inference_threshold_peaks: 0.1 # only pixels with accumulated votes larger than this value are considered as stems
+stem_inference_kernel_size_votes: 3 # pixels also vote for neighbors within this window, should be odd
+stem_inference_kernel_size_peaks: 5 # non-maximum suppression for all peaks in this window, should be odd
 
 # evaluation
 tolerance_radius: 5.0 # in target pixels

@@ -5,6 +5,8 @@ project(library_crop_detection)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_CUDA_STANDARD 11)
+
 ## Flags to explicitly enable/disable CUDA/TensorRT
 set(CUDA_ENABLED TRUE)
 set(TENSORRT_ENABLED TRUE)
@@ -12,6 +14,11 @@ set(TORCH_ENABLED TRUE)
 message(STATUS "Enable build with CUDA: ${CUDA_ENABLED}")
 message(STATUS "Enable build with TensorRT: ${TENSORRT_ENABLED}")
 message(STATUS "Enable build with Torch: ${TORCH_ENABLED}")
+
+## Warnings and optimaization
+set(CMAKE_CXX_FLAGS "-Wall -Wextra")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
+#set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 ## Build type is debug by default
 if(NOT CMAKE_BUILD_TYPE)
@@ -25,15 +32,10 @@ if(${CMAKE_BUILD_TYPE} MATCHES Debug)
   message(STATUS "Build with debug option.")
 endif()
 
-## Warnings and optimaization
-# set(CMAKE_CXX_FLAGS "-Wall -Wextra")
-set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3")
-
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED)
+find_package(catkin REQUIRED rosconsole)
 
 ## Find non-ROS dependencies
 
@@ -222,10 +224,13 @@ endif(TORCH_AVAILABLE)
 ## Declare a C++ library
 
 add_library(${PROJECT_NAME}
+  src/network_output.cpp
+  src/stem_extractor.cpp
+  src/semantic_labeler.cpp
   src/tensorrt_network.cpp
   src/pytorch_network.cpp
-  src/network_inference.cpp
-  src/opencv_stem_inference.cpp
+  src/network_output_visualizer.cpp
+  src/stop_watch.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}

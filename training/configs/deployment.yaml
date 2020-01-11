@@ -1,9 +1,9 @@
-# deployment parameters (used for model freezing/onnx export)
+# deployment parameters (only used for model onnx/pt export)
 
 batch_size: 1
 input_channels: 4
-input_height: 322
-input_width: 432
+input_height: 966
+input_width: 1296
 
 target_height: 322
 target_width: 432
