@@ -81,7 +81,7 @@ def tensor_to_false_color(tensor_rgb, tensor_nir, mean_rgb, std_rgb, mean_nir, s
     return image_bgr
 
 
-def make_plot_from_semantic_output(input_rgb, input_nir, semantic_output, apply_softmax, **normalization):
+def make_plot_from_semantic_output(input_rgb, input_nir, semantic_output, semantic_target, apply_softmax, **normalization):
     image = tensor_to_false_color(input_rgb, input_nir, **normalization)
 
     # use grayscale as background
@@ -107,6 +107,44 @@ def make_plot_from_semantic_output(input_rgb, input_nir, semantic_output, apply_
 
     plot = background+0.5*weed_color*weed_heatmap+0.5*sugar_beet_color*sugar_beet_heatmap
     plot = np.clip(plot, 0.0, 1.0)
+
+    if semantic_target is not None:
+        semantic_target = semantic_target.detach().cpu().numpy()
+        for label, color in [(1, weed_color), (2, sugar_beet_color)]:
+            mask = (semantic_target==label).astype(np.uint8)
+            kernel = np.ones((4, 4,), np.uint8)
+            mask_dilated = cv2.dilate(mask, kernel)
+            contours = np.logical_xor(mask>0, mask_dilated>0)
+            plot = np.where(mask[..., None], color, plot)
+
+    return plot
+
+
+def make_plot_from_semantic_labels(input_rgb, input_nir, semantic_labels, **normalization):
+    image = tensor_to_false_color(input_rgb, input_nir, **normalization)
+
+    # use grayscale as background
+    height, width = semantic_labels.shape[-2:]
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    background = np.stack(3*[gray], axis=-1)
+    background = cv2.resize(background, (width, height), cv2.INTER_LINEAR)
+
+    # show sugar beet heatmap in blue
+    sugar_beet_color = np.array([1.0, 0.0, 0.0]).reshape(1, 1, 3)
+
+    # show weed heatmap in yellow
+    weed_color = np.array([0.0, 1.0, 1.0]).reshape(1, 1, 3)
+
+    plot = background
+    # plot = np.clip(plot, 0.0, 1.0)
+
+    semantic_labels = semantic_labels.detach().cpu().numpy()
+    for label, color in [(1, weed_color), (2, sugar_beet_color)]:
+        mask = (semantic_labels==label).astype(np.uint8)
+        # kernel = np.ones((4, 4,), np.uint8)
+        # mask_dilated = cv2.dilate(mask, kernel)
+        # contours = np.logical_xor(mask>0, mask_dilated>0)
+        plot = np.where(mask[..., None], color, plot)
 
     return plot
 
