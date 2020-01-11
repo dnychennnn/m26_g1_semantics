@@ -280,6 +280,10 @@ class SugarBeetDataset(Dataset):
         # get keypoint mask and offsets
         stem_keypoint_target, stem_offset_target = self._make_stem_target(stem_position_target)
 
+        cv2.imshow('rgb', rgb_image[..., ::-1])
+        cv2.imshow('nir', nir_image)
+        cv2.waitKey()
+
         # convert input images to tensors
         rgb_tensor = self.pil_to_tensor(rgb_image) # shape (3, input_height, input_width,)
         nir_tensor = self.pil_to_tensor(nir_image) # shape (1, input_height, input_width,)
@@ -541,6 +545,8 @@ class RandomTransformations:
                  contrast_max,
                  blur_min,
                  blur_max,
+                 noise_min,
+                 noise_max,
                  **extra_arguments):
 
         self.input_width = input_width
@@ -562,6 +568,8 @@ class RandomTransformations:
         self.contrast_max = contrast_max
         self.blur_min = blur_min
         self.blur_max = blur_max
+        self.noise_min = noise_min
+        self.noise_max = noise_max
 
         self.crop_size = self._compute_max_range()
 
@@ -630,6 +638,8 @@ class RandomTransformations:
                                        self.contrast_max)
         self.blur = random.uniform(self.blur_min,
                                    self.blur_max)
+        self.noise = random.uniform(self.noise_min,
+                                    self.noise_max)
 
     def apply_geometric_transformation_to_image(self, image, interpolation):
         image_height, image_width = image.shape[:2]
@@ -656,8 +666,13 @@ class RandomTransformations:
         image = np.clip(image + 255.0*self.brightness, 0, 255).astype(np.uint8)
 
         # blur
-        if self.blur > 0.0:
+        if self.blur>0.0:
             image = cv2.GaussianBlur(image, (0, 0), sigmaX=self.blur)
+
+        # noise
+        if self.noise>0.0:
+          gaussian = np.random.normal(0.0, self.noise**2, image.shape)
+          image = np.clip(image+255.0*gaussian, 0, 255).astype(np.uint8)
 
         return image
 
