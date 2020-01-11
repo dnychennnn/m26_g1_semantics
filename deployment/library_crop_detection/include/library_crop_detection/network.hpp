@@ -21,8 +21,8 @@ namespace igg {
 struct NetworkParameters {
   std::vector<float> mean = {0.386, 0.227, 0.054, 0.220};
   std::vector<float> std = {0.124, 0.072, 0.0108, 0.066};
-  int input_height = 322;
-  int input_width = 432;
+  int input_height = 966;
+  int input_width = 1296;
   int input_channels = 4;
 };
 

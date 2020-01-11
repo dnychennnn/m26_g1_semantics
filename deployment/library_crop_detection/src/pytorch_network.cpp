@@ -48,7 +48,7 @@ PytorchNetwork::PytorchNetwork(
 
 PytorchNetwork::~PytorchNetwork() {
   // Free buffer memory
-  free(this->input_buffer_);
+  if (this->input_buffer_) {free(this->input_buffer_);}
 }
 
 void PytorchNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
@@ -131,20 +131,20 @@ void PytorchNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
     std::memcpy(result.ServeSemanticClassConfidenceBuffer(class_index,
           kSemanticOutputWidth, kSemanticOutputHeight),
                 semantic_output_tensor.slice(1, class_index, class_index+1).data_ptr<float>(),
-                4*this->kInputWidth_*this->kInputHeight_);
+                4*kSemanticOutputWidth*kSemanticOutputHeight);
   }
 
   std::memcpy(result.ServeStemKeypointConfidenceBuffer(kKeypointOutputWidth, kKeypointOutputHeight),
               keypoint_output_tensor.data_ptr<float>(),
-              4*this->kInputWidth_*this->kInputHeight_);
+              4*kKeypointOutputWidth*kKeypointOutputHeight);
 
   std::memcpy(result.ServeStemOffsetXBuffer(kOffsetOutputWidth, kOffsetOutputHeight),
               keypoint_offset_output_tensor.slice(1, 0, 1).data_ptr<float>(),
-              4*this->kInputWidth_*this->kInputHeight_);
+              4*kOffsetOutputWidth*kOffsetOutputHeight);
 
   std::memcpy(result.ServeStemOffsetYBuffer(kOffsetOutputWidth, kOffsetOutputHeight),
               keypoint_offset_output_tensor.slice(1, 1, 2).data_ptr<float>(),
-              4*this->kInputWidth_*this->kInputHeight_);
+              4*kOffsetOutputWidth*kOffsetOutputHeight);
 
   #ifdef DEBUG_MODE
   double inference_time = stop_watch.ElapsedTime();

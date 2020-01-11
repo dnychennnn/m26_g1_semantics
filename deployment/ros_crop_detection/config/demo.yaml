@@ -1,7 +1,7 @@
 mean: [0.386, 0.227, 0.054, 0.220]
 std: [0.124, 0.072, 0.0108, 0.066]
-input_height: 322
-input_width: 432
+input_height: 966
+input_width: 1296
 input_channels: 4
 keypoint_radius: 15.0
 threshold_sugar_beet: 0.8 # confidence threshold to be labeled as sugar beet

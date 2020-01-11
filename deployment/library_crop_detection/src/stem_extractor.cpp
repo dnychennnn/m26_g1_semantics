@@ -105,9 +105,10 @@ void StemExtractor::Infer(NetworkOutput& result) const {
   int position_x, position_y;
   float confidence;
   for(int index=0; index<peak_positions.rows; index++) {
+    confidence = votes.at<float>(peak_positions.at<int>(index, 1),
+                                 peak_positions.at<int>(index, 0));
     position_x = scaling_x*(0.5+peak_positions.at<int>(index, 0));
     position_y = scaling_y*(0.5+peak_positions.at<int>(index, 1));
-    confidence = votes.at<float>(position_y, position_x);
 
     stem_positions.emplace_back(cv::Vec3f(static_cast<float>(position_x),
                                           static_cast<float>(position_y),

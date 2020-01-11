@@ -60,11 +60,13 @@ CropDetection::CropDetection(ros::NodeHandle& node_handle,
 
   try {
     ROS_INFO("Attempt to init TensorRT network.");
+    if (this->network_) {this->network_.reset();}
     this->network_ = std::make_unique<TensorrtNetwork>(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
     this->network_->Load((Network::ModelsDir()/(kArchitectureName+".onnx")).string(), false); // false as we do not enforce rebuilding the model
   } catch (const std::exception& kError) {
     ROS_WARN("Cannot init TensorRT network ('%s'). Trying Torch.", kError.what());
     try {
+      if (this->network_) {this->network_.reset();}
       this->network_ = std::make_unique<PytorchNetwork>(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
       this->network_->Load((Network::ModelsDir()/(kArchitectureName+".pt")).string(), false);
     } catch (const std::exception& kError) {
@@ -75,12 +77,19 @@ CropDetection::CropDetection(ros::NodeHandle& node_handle,
 }
 
 
-CropDetection::~CropDetection() {}
+CropDetection::~CropDetection() {
+
+}
 
 
 void CropDetection::Callback(const sensor_msgs::ImageConstPtr& kRgbImageMessage,
                              const sensor_msgs::ImageConstPtr& kNirImageMessage) {
   ROS_INFO("Crop detection callback.");
+
+  if (!this->network_) {
+    ROS_WARN("Received image, but network is not initialized.");
+    return;
+  }
 
   if (!this->network_->IsReadyToInfer()) {
     ROS_WARN("Received image, but network is not loaded.");

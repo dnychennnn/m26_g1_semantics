@@ -32,7 +32,7 @@ int main() {
   igg::PytorchNetwork network(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
 
   // load pt file
-  const auto model_path = igg::Network::ModelsDir()/"hardnet56.pt";
+  const auto model_path = igg::Network::ModelsDir()/"densenet56.pt";
   std::cout << "Load model file: " << model_path << "\n";
   network.Load(model_path.string(), false);
 

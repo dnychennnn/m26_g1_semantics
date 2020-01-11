@@ -18,6 +18,8 @@
     default="$(env M26_G1_SEMANTICS_BAGS_DIR)flourish-rng_2015-06-29-14-43-43_1.bag" />
 
   <!-- Bring up crop detection node. -->
+  <!-- launch-prefix="valgrind" -->
+  <!-- launch-prefix="gdb" -->
   <node pkg="ros_crop_detection"
         type="crop_detection_node"
         name="crop_detection_node"
@@ -32,7 +34,7 @@
         type="play"
         name="rosbag_play_node"
         output="screen"
-        args="$(arg path_to_bag_file) --delay=3"/>
+        args="$(arg path_to_bag_file) --delay=3 "/>
   <!-- Start with 3 seconds delay after advertising topics. -->
 
   <!-- Save output to files (folder .ros in home directory). -->

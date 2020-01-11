@@ -74,7 +74,7 @@ private:
   image_transport::Publisher visualization_votes_publisher_;
 
   //! Network.
-  std::unique_ptr<igg::Network> network_ = nullptr;
+  std::unique_ptr<igg::Network> network_;
 
   //! Visualizer.
   const NetworkOutputVisualizer kVisualizer_;

@@ -51,8 +51,8 @@ TensorrtNetwork::TensorrtNetwork(
 TensorrtNetwork::~TensorrtNetwork() {
   ASSERT_TENSORRT_AVAILABLE;
   #ifdef TENSORRT_AVAILABLE
-  if(this->context_){this->context_->destroy();}
-  if(this->engine_){this->engine_->destroy();}
+  if(this->context_){this->context_->destroy(); this->context_ = nullptr;}
+  if(this->engine_){this->engine_->destroy(); this->engine_ = nullptr;}
   this->FreeBufferMemory();
   #endif // TENSORRT_AVAILABLE
 }
@@ -213,6 +213,9 @@ void TensorrtNetwork::Load(const std::string& kFilepath, const bool kForceRebuil
     auto parser = nvonnxparser::createParser(*network, this->logger_);
     if(!parser->parseFromFile(kFilepath.c_str(),
          static_cast<int>(this->logger_.getReportableSeverity()))){
+      if (parser) {parser->destroy(); parser = nullptr;}
+      if (builder) {builder->destroy(); builder = nullptr;}
+      if (network) {network->destroy(); network = nullptr;}
       throw std::runtime_error("Cannnot parse model file: '"+kFilepath+"'");
     }
 
@@ -220,13 +223,13 @@ void TensorrtNetwork::Load(const std::string& kFilepath, const bool kForceRebuil
     auto config = builder->createBuilderConfig();
     config->setMaxWorkspaceSize(1<<20);
 
-    if(this->engine_){this->engine_->destroy();}
+    if(this->engine_){this->engine_->destroy(); this->engine_ = nullptr;}
     this->engine_ = builder->buildEngineWithConfig(*network, *config);
 
-    parser->destroy();
-    network->destroy();
-    config->destroy();
-    builder->destroy();
+    if (parser) {parser->destroy(); parser = nullptr;}
+    if (builder) {builder->destroy(); builder = nullptr;}
+    if (config) {config->destroy(); config = nullptr;}
+    if (network) {network->destroy(); network = nullptr;}
 
     // store model to disk
     auto serialized_model = this->engine_->serialize();
@@ -235,7 +238,7 @@ void TensorrtNetwork::Load(const std::string& kFilepath, const bool kForceRebuil
     } else {
       std::ofstream serialized_model_output_file(kEngineFilepath, std::ios::binary);
       serialized_model_output_file.write(reinterpret_cast<const char*>(serialized_model->data()), serialized_model->size());
-      serialized_model->destroy();
+      serialized_model->destroy(); serialized_model = nullptr;
     }
   }
   this->ReadBindingsAndAllocateBufferMemory();
@@ -273,19 +276,20 @@ bool TensorrtNetwork::LoadSerialized(const std::string& kFilepath) {
 
   model_stream.read(reinterpret_cast<char*>(model_memory), kModelSize);
 
-  if (this->engine_) {this->engine_->destroy();}
+  if (this->engine_) {this->engine_->destroy(); this->engine_ = nullptr;}
 
   nvinfer1::IRuntime* runtime = nvinfer1::createInferRuntime(this->logger_);
 
   if (!runtime) {
     std::cout << "Warning: Cannot not create runtime." << std::endl;
+    if (model_memory) {free(model_memory); model_memory=nullptr;}
     return false;
   }
 
   this->engine_ = runtime->deserializeCudaEngine(model_memory, kModelSize, nullptr);
 
-  free(model_memory);
-  runtime->destroy();
+  if (model_memory) {free(model_memory); model_memory = nullptr;}
+  if (runtime) {runtime->destroy(); runtime = nullptr;};
 
   return true;
   #endif // TENSORRT_AVAILABLE
@@ -377,6 +381,7 @@ void TensorrtNetwork::ReadBindingsAndAllocateBufferMemory() {
     throw std::runtime_error("Expected binding to have two channels: 'stem_offset_output'");
   }
 
+  /*
   if (!(this->input_width_==this->semantic_output_width_
         && this->input_width_==this->stem_keypoint_output_width_
         && this->input_width_==this->stem_offset_output_width_
@@ -385,6 +390,7 @@ void TensorrtNetwork::ReadBindingsAndAllocateBufferMemory() {
         && this->input_height_==this->stem_offset_output_height_)) {
     throw std::runtime_error("Expect all inputs and ouputs to have the same height and width.");
   }
+  */
 
   if (!(this->input_channels_==this->mean_.size()
         &&this->input_channels_==this->std_.size())){
@@ -397,13 +403,18 @@ void TensorrtNetwork::ReadBindingsAndAllocateBufferMemory() {
 void TensorrtNetwork::FreeBufferMemory() {
   // host
   #ifdef TENSORRT_AVAILABLE
-  HANDLE_ERROR(cudaFreeHost(this->host_buffer_));
+  if (this->host_buffer_) {
+    HANDLE_ERROR(cudaFreeHost(this->host_buffer_)); this->host_buffer_ = nullptr;
+  }
   #endif // TENSORRT_AVAILABLE
 
   // device
-  for(void* buffer: this->device_buffers_) {
+  for(size_t buffer_index = 0; buffer_index<this->device_buffers_.size(); buffer_index++) {
     #ifdef TENSORRT_AVAILABLE
-    HANDLE_ERROR(cudaFree(buffer));
+    if (this->device_buffers_[buffer_index]) {
+      HANDLE_ERROR(cudaFree(this->device_buffers_[buffer_index]));
+      this->device_buffers_[buffer_index] = nullptr;
+    }
     #endif // TENSORRT_AVAILABLE
   }
   this->device_buffers_.clear();
