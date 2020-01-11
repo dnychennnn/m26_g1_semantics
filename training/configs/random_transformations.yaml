@@ -21,7 +21,7 @@ contrast_min: 0.2
 contrast_max: -0.2
 
 blur_min: 0.0
-blur_max: 1.0
+blur_max: 3.0
 
 noise_min: 0.0
 noise_max: 0.2
