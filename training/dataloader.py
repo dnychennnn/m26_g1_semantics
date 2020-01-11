@@ -126,13 +126,14 @@ class SugarBeetDataset(Dataset):
         self.input_width = input_width
         self.target_height = target_height
         self.target_width = target_width
-        self.resize_input = transforms.Resize((input_height, input_width), interpolation=Image.BILINEAR)
-        self.resize_target = transforms.Resize((target_height, target_width), interpolation=Image.NEAREST)
 
         self.mean_rgb = mean_rgb
         self.std_rgb = std_rgb
         self.mean_nir = mean_nir
         self.std_nir = std_nir
+
+        self.target_scale_factor_x = self.target_width/self.input_width
+        self.target_scale_factor_y = self.target_height/self.input_height
 
         # to provide this for other components
         self.normalization_rgb_dict = {'mean_rgb': self.mean_rgb,
@@ -215,8 +216,8 @@ class SugarBeetDataset(Dataset):
         nir_image = cv2.imread(str(self.get_path_to_nir_image(filename)), cv2.IMREAD_UNCHANGED)
 
         original_height, original_width = np.array(rgb_image).shape[:2]
-        target_scale_factor_y = self.target_height/original_height
-        target_scale_factor_x = self.target_width/original_width
+        input_scale_factor_y = self.input_height/original_height
+        input_scale_factor_x = self.input_width/original_width
 
         rgb_image = cv2.resize(rgb_image, (self.input_width, self.input_height), cv2.INTER_LINEAR)
         nir_image = cv2.resize(nir_image, (self.input_width, self.input_height), cv2.INTER_LINEAR)
@@ -233,8 +234,8 @@ class SugarBeetDataset(Dataset):
 
         stem_positions = SugarBeetDataset._get_stem_positions_from_annotaions_dict(annotations_dict)
 
-        # scale stem positions to target size
-        stem_position_target = [(x*target_scale_factor_x, y*target_scale_factor_y)
+        # scale stem positions to input size
+        stem_position_target = [(x*input_scale_factor_x, y*input_scale_factor_y)
                                  for x, y in stem_positions]
         stem_position_target = np.array(stem_position_target, dtype=np.float32)
 
@@ -260,7 +261,6 @@ class SugarBeetDataset(Dataset):
             rgb_image = self.random_transformations.apply_color_transformation_to_image(rgb_image)
             nir_image = self.random_transformations.apply_color_transformation_to_image(nir_image)
 
-
             if stem_position_target.shape[0]>0:
                 # transform stem positions
 
@@ -277,12 +277,21 @@ class SugarBeetDataset(Dataset):
                                 &(stem_position_target[..., 1]>=0)&(stem_position_target[..., 1]<self.input_height))
                 stem_position_target = stem_position_target[inside_image]
 
+        # scale semantic target to target size
+        semantic_target = cv2.resize(semantic_target, (self.target_width, self.target_height), cv2.INTER_NEAREST)
+
+        # scale position to target
+        stem_position_target = [(x*self.target_scale_factor_x, y*self.target_scale_factor_y)
+                                for x, y in stem_position_target]
+        stem_position_target = np.array(stem_position_target, dtype=np.float32)
+
         # get keypoint mask and offsets
         stem_keypoint_target, stem_offset_target = self._make_stem_target(stem_position_target)
 
-        cv2.imshow('rgb', rgb_image[..., ::-1])
-        cv2.imshow('nir', nir_image)
-        cv2.waitKey()
+        # debug output
+        # cv2.imshow('rgb', rgb_image[..., ::-1])
+        # cv2.imshow('nir', nir_image)
+        # cv2.waitKey()
 
         # convert input images to tensors
         rgb_tensor = self.pil_to_tensor(rgb_image) # shape (3, input_height, input_width,)

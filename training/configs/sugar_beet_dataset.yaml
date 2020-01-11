@@ -3,11 +3,13 @@ label_ignore: 1
 label_weed: 20001
 label_sugar_beet: 10000
 
-input_height: 322
-input_width: 432
+#input_height: 322
+#input_width: 432
+#input_height: 966
+#input_width: 1296
 
-target_height: 322
-target_width: 432
+#target_height: 322
+#target_width: 432
 
 # normalization parameters
 mean_rgb: [0.3855186419211486, 0.22667925089614235, 0.053568861512275835]

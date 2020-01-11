@@ -41,13 +41,15 @@ class StemRegressionLoss(nn.Module):
         super().__init__()
         # self.tanh = nn.Tanh()
         # self.criterion = nn.MSELoss()
-        self.criterion = nn.L1Loss() # Huber loss
+        self.criterion = nn.L1Loss()
 
 
     def forward(self, stem_offset_output_batch, stem_keypoint_target_batch,
                 stem_offset_target_batch):
         # apply tanh to have offsets in range -1, 1
         # normalized_offset_output_batch = self.tanh(stem_offset_output_batch)
+
+        device = stem_offset_output_batch.device
 
         # no tanh, use plain logits
         normalized_offset_output_batch = stem_offset_output_batch
@@ -59,7 +61,13 @@ class StemRegressionLoss(nn.Module):
         # debug output
         # np_keypoint_mask = keypoint_mask_batch.cpu().detach().numpy()
         # cv2.imshow('keypoint_mask', (225*np_keypoint_mask[0, 0]).astype(np.uint8))
+        # np_offsets = stem_offset_target_batch.cpu().detach().numpy()
+        # cv2.imshow('offsets', (225*np_offsets[0, 0]).astype(np.uint8))
         # cv2.waitKey()
+
+        if not torch.any(keypoint_mask_batch):
+            print('Stem regression loss: No pixels in mask.')
+            return torch.tensor(0.0, device=device)
 
         # get offsets in mask from output and target
         masked_offset_output = normalized_offset_output_batch[keypoint_mask_batch]
@@ -75,7 +83,7 @@ class StemRegressionLoss(nn.Module):
 
         if torch.isnan(loss):
             print('Stem regression loss: Nan encountered.')
-            return torch.tensor(0.0, device=loss.device)
+            return torch.tensor(0.0, device=device)
 
         return loss
 

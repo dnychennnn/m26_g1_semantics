@@ -585,6 +585,8 @@ class Trainer:
                                                     stem_position_output=stem_position_output,
                                                     stem_position_target=stem_position_target,
                                                     keypoint_radius=self.keypoint_radius,
+                                                    target_width=stem_keypoint_output.shape[-1],
+                                                    target_height=stem_keypoint_output.shape[-2],
                                                     **self.dataset_val.normalization_rgb_dict,
                                                     **self.dataset_val.normalization_nir_dict)
 

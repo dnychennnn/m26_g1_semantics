@@ -81,13 +81,14 @@ def tensor_to_false_color(tensor_rgb, tensor_nir, mean_rgb, std_rgb, mean_nir, s
     return image_bgr
 
 
-
 def make_plot_from_semantic_output(input_rgb, input_nir, semantic_output, apply_softmax, **normalization):
     image = tensor_to_false_color(input_rgb, input_nir, **normalization)
 
     # use grayscale as background
+    height, width = semantic_output.shape[-2:]
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     background = np.stack(3*[gray], axis=-1)
+    background = cv2.resize(background, (width, height), cv2.INTER_LINEAR)
 
     # show sugar beet heatmap in blue
     sugar_beet_color = np.array([1.0, 0.0, 0.0]).reshape(1, 1, 3)
@@ -116,11 +117,11 @@ def make_plot_from_stem_keypoint_offset_output(input_rgb, input_nir, stem_keypoi
     """
     image = tensor_to_false_color(input_rgb, input_nir, **normalization)
 
-    height, width = image.shape[:2]
-
     # use grayscale as background
+    height, width = stem_keypoint_output.shape[-2:]
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     background = np.stack(3*[gray], axis=-1)
+    background = cv2.resize(background, (width, height), cv2.INTER_LINEAR)
 
     while len(stem_keypoint_output.shape)>2:
         stem_keypoint_output = stem_keypoint_output[0]
@@ -160,14 +161,14 @@ def make_plot_from_stem_keypoint_offset_output(input_rgb, input_nir, stem_keypoi
     return plot
 
 
-def make_plot_from_stem_output(input_rgb, input_nir, stem_position_output, stem_position_target, keypoint_radius, **normalization):
+def make_plot_from_stem_output(input_rgb, input_nir, stem_position_output, stem_position_target, keypoint_radius, target_width, target_height, **normalization):
     """
     Note: This function contains parts, which were written for other student projects
     conducted by the author.
     """
-    image = tensor_to_false_color(input_rgb, input_nir, **normalization)
 
-    height, width = image.shape[:2]
+    image = tensor_to_false_color(input_rgb, input_nir, **normalization)
+    image = cv2.resize(image, (target_width, target_height), cv2.INTER_LINEAR)
 
     if stem_position_output is not None:
         while len(stem_position_output.shape)>2:
@@ -179,7 +180,7 @@ def make_plot_from_stem_output(input_rgb, input_nir, stem_position_output, stem_
 
     plot = image
 
-    markers = np.zeros((height, width, 3,), dtype=np.float)
+    markers = np.zeros((target_height, target_width, 3,), dtype=np.float)
 
     def draw_marker(x, y, color, thickness):
         cv2.circle(markers, (x, y), keypoint_radius, color, thickness)
