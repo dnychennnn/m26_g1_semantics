@@ -54,4 +54,13 @@ int main() {
   cv::imshow("output_keypoints", visualizer.MakeKeypointsVisualization(result));
   cv::imshow("keypoint_votes", visualizer.MakeVotesVisualization(result));
   cv::waitKey(0);
+
+  // write images to files
+  //cv::imwrite("input_false_color.png", visualizer.MakeInputFalseColorVisualization(result));
+  //cv::imwrite("input_bgr.png", visualizer.MakeInputBgrVisualization(result));
+  //cv::imwrite("input_nir.png", visualizer.MakeInputNirVisualization(result));
+  //cv::imwrite("output.png", visualizer.MakeVisualization(result));
+  //cv::imwrite("output_semantics.png", visualizer.MakeSemanticsVisualization(result));
+  //cv::imwrite("output_keypoints.png", visualizer.MakeKeypointsVisualization(result));
+  //cv::imwrite("keypoint_votes.png", visualizer.MakeVotesVisualization(result));
 }
