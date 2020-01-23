@@ -16,7 +16,8 @@ class NetworkOutputVisualizer {
 
 public:
   cv::Mat MakeVisualization(const NetworkOutput& kNetworkOutput) const;
-  cv::Mat MakeSemanticsVisualization(const NetworkOutput& kNetworkOutput) const;
+  cv::Mat MakeSugarBeetConfidenceVisualization(const NetworkOutput& kNetworkOutput) const;
+  cv::Mat MakeWeedConfidenceVisualization(const NetworkOutput& kNetworkOutput) const;
   cv::Mat MakeKeypointsVisualization(const NetworkOutput& kNetworkOutput) const;
   cv::Mat MakeVotesVisualization(const NetworkOutput& kNetworkOutput) const;
 

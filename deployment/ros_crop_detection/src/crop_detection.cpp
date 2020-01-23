@@ -54,7 +54,8 @@ CropDetection::CropDetection(ros::NodeHandle& node_handle,
   this->input_false_color_publisher_ = transport.advertise("input_false_color", 1);
 
   this->visualization_publisher_ = transport.advertise("visualization", 1);
-  this->visualization_semantics_publisher_ = transport.advertise("visualization_semantics", 1);
+  this->visualization_sugar_beet_confidence_publisher_ = transport.advertise("visualization_sugar_beet_confidence", 1);
+  this->visualization_weed_confidence_publisher_ = transport.advertise("visualization_weed_confidence", 1);
   this->visualization_keypoints_publisher_ = transport.advertise("visualization_keypoints", 1);
   this->visualization_votes_publisher_ = transport.advertise("visualization_votes", 1);
 
@@ -173,10 +174,16 @@ void CropDetection::Callback(const sensor_msgs::ImageConstPtr& kRgbImageMessage,
     this->visualization_publisher_.publish(visualization);
   }
 
-  if (this->visualization_semantics_publisher_.getNumSubscribers()>0) {
-    sensor_msgs::ImagePtr visualization_semantics = cv_bridge::CvImage(
-        header, "bgr8", this->kVisualizer_.MakeSemanticsVisualization(result)).toImageMsg();
-    this->visualization_semantics_publisher_.publish(visualization_semantics);
+  if (this->visualization_sugar_beet_confidence_publisher_.getNumSubscribers()>0) {
+    sensor_msgs::ImagePtr visualization_sugar_beet_confidence = cv_bridge::CvImage(
+        header, "bgr8", this->kVisualizer_.MakeSugarBeetConfidenceVisualization(result)).toImageMsg();
+    this->visualization_sugar_beet_confidence_publisher_.publish(visualization_sugar_beet_confidence);
+  }
+
+  if (this->visualization_weed_confidence_publisher_.getNumSubscribers()>0) {
+    sensor_msgs::ImagePtr visualization_weed_confidence = cv_bridge::CvImage(
+        header, "bgr8", this->kVisualizer_.MakeWeedConfidenceVisualization(result)).toImageMsg();
+    this->visualization_weed_confidence_publisher_.publish(visualization_weed_confidence);
   }
 
   if (this->visualization_keypoints_publisher_.getNumSubscribers()>0) {

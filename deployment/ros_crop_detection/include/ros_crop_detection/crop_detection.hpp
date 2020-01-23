@@ -16,7 +16,6 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
 
-//#include "library_crop_detection/tensorrt_network.hpp"
 #include "library_crop_detection/network.hpp"
 #include "library_crop_detection/network_output_visualizer.hpp"
 
@@ -69,7 +68,8 @@ private:
   image_transport::Publisher input_nir_publisher_;
   image_transport::Publisher input_false_color_publisher_;
   image_transport::Publisher visualization_publisher_;
-  image_transport::Publisher visualization_semantics_publisher_;
+  image_transport::Publisher visualization_sugar_beet_confidence_publisher_;
+  image_transport::Publisher visualization_weed_confidence_publisher_;
   image_transport::Publisher visualization_keypoints_publisher_;
   image_transport::Publisher visualization_votes_publisher_;
 

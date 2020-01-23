@@ -21,73 +21,6 @@ namespace igg {
 cv::Mat NetworkOutputVisualizer::MakeVisualization(
     const NetworkOutput& kNetworkOutput) const {
 
-  cv::Mat plot = this->MakeBackground(kNetworkOutput, true);
-  plot.convertTo(plot, CV_32FC3);
-  plot /= 255.0;
-
-  std::vector<cv::Mat> channels;
-  cv::split(plot, channels);
-
-  cv::Mat blue = channels[0];
-  cv::Mat green = channels[1];
-  cv::Mat red = channels[2];
-
-  cv::Mat weed_confidence = kNetworkOutput.SemanticClassConfidence(1);
-  cv::Mat sugar_beet_confidence = kNetworkOutput.SemanticClassConfidence(2);
-
-  weed_confidence = this->Scale(weed_confidence, cv::INTER_NEAREST);
-  sugar_beet_confidence = this->Scale(sugar_beet_confidence, cv::INTER_NEAREST);
-
-  // sugar beet in blue
-  blue += 0.5*sugar_beet_confidence;
-
-  // weed in yellow
-  red += 0.5*weed_confidence;
-  green += 0.5*weed_confidence;
-
-  channels = {blue, green, red};
-  cv::merge(channels, plot);
-
-  cv::Mat markers = cv::Mat::zeros(plot.rows, plot.cols, CV_32FC3);
-
-  const cv::Mat& kInputImage = kNetworkOutput.InputImage();
-  float scaling_y = static_cast<float>(this->kVisualizationHeight_)/static_cast<float>(kInputImage.rows);
-  float scaling_x = static_cast<float>(this->kVisualizationWidth_)/static_cast<float>(kInputImage.cols);
-
-  for(const cv::Vec3f& kPosition: kNetworkOutput.StemPositions()) {
-    int x = static_cast<int>(std::round(scaling_x*kPosition[0]));
-    int y = static_cast<int>(std::round(scaling_y*kPosition[1]));
-
-    float confidence = std::max(std::min(kPosition[2], 1.0f), 0.1f);
-    // alpha according to confidence
-    cv::Scalar color = cv::Scalar(confidence, confidence, confidence);
-    // thickness according to confidence
-    int thickness = std::min(std::max(static_cast<int>(std::round(5.0*confidence)), 1), 5);
-
-    cv::circle(markers, cv::Point(x, y), this->kMarkerRadius_, color, thickness);
-    cv::line(markers, cv::Point(x, y+this->kMarkerRadius_), cv::Point(x, y+this->kMarkerRadius_-10), color, thickness);
-    cv::line(markers, cv::Point(x, y-this->kMarkerRadius_), cv::Point(x, y-this->kMarkerRadius_+10), color, thickness);
-    cv::line(markers, cv::Point(x+this->kMarkerRadius_, y), cv::Point(x+this->kMarkerRadius_-10, y), color, thickness);
-    cv::line(markers, cv::Point(x-this->kMarkerRadius_, y), cv::Point(x-this->kMarkerRadius_+10, y), color, thickness);
-
-    cv::putText(markers, std::to_string(kPosition[2]),
-        cv::Point(x+this->kMarkerRadius_, y+this->kMarkerRadius_),
-        cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(1.0, 1.0, 1.0), 1);
-  }
-
-  plot += 0.5*markers;
-
-  // to 8 bit unsigned integer
-  plot *= 255.0;
-  plot.convertTo(plot, CV_8UC3);
-
-  return plot;
-}
-
-
-cv::Mat NetworkOutputVisualizer::MakeSemanticsVisualization(
-    const NetworkOutput& kNetworkOutput) const {
-
   cv::Mat semantic_labels = kNetworkOutput.SemanticClassLabels();
 
   if (semantic_labels.empty()) {
@@ -96,25 +29,20 @@ cv::Mat NetworkOutputVisualizer::MakeSemanticsVisualization(
 
   cv::Mat plot = this->MakeBackground(kNetworkOutput, true);
 
-  semantic_labels = this->Scale(semantic_labels, cv::INTER_NEAREST);
-
-  const cv::Scalar kWeedColor = cv::Scalar(0, 255, 255);
-  cv::Mat weed_mask;
-  cv::compare(semantic_labels, 1, weed_mask, cv::CMP_EQ);
-  //plot.setTo(kWeedColor, weed_mask);
-
-  // draw sugar beets in blue
-  const cv::Scalar kSugarBeetColor = cv::Scalar(255, 0, 0);
-  cv::Mat sugar_beet_mask;
-  cv::compare(semantic_labels, 2, sugar_beet_mask, cv::CMP_EQ);
-  //plot.setTo(kSugarBeetColor, sugar_beet_mask);
-
   std::vector<cv::Mat> channels;
   cv::split(plot, channels);
 
   cv::Mat blue = channels[0];
   cv::Mat green = channels[1];
   cv::Mat red = channels[2];
+
+  semantic_labels = this->Scale(semantic_labels, cv::INTER_NEAREST);
+
+  cv::Mat weed_mask;
+  cv::compare(semantic_labels, 1, weed_mask, cv::CMP_EQ);
+
+  cv::Mat sugar_beet_mask;
+  cv::compare(semantic_labels, 2, sugar_beet_mask, cv::CMP_EQ);
 
   // sugar beet in blue
   blue += 127*sugar_beet_mask;
@@ -125,6 +53,69 @@ cv::Mat NetworkOutputVisualizer::MakeSemanticsVisualization(
 
   channels = {blue, green, red};
   cv::merge(channels, plot);
+
+  cv::Mat markers = cv::Mat::zeros(plot.rows, plot.cols, CV_8UC3);
+
+  const cv::Mat& kInputImage = kNetworkOutput.InputImage();
+  float scaling_y = static_cast<float>(this->kVisualizationHeight_)/static_cast<float>(kInputImage.rows);
+  float scaling_x = static_cast<float>(this->kVisualizationWidth_)/static_cast<float>(kInputImage.cols);
+
+  for(const cv::Vec3f& kPosition: kNetworkOutput.StemPositions()) {
+    int x = static_cast<int>(std::round(scaling_x*kPosition[0]));
+    int y = static_cast<int>(std::round(scaling_y*kPosition[1]));
+
+    // alpha according to confidence
+    int alpha = std::max(std::min(static_cast<int>(255.0*kPosition[2]), 255), 50);
+    cv::Scalar color = cv::Scalar(alpha, alpha, alpha);
+    // thickness according to confidence
+    int thickness = std::min(std::max(static_cast<int>(std::round(5.0*alpha/255.0)), 1), 5);
+
+    cv::circle(markers, cv::Point(x, y), this->kMarkerRadius_, color, thickness);
+    cv::line(markers, cv::Point(x, y+this->kMarkerRadius_), cv::Point(x, y+this->kMarkerRadius_-10), color, thickness);
+    cv::line(markers, cv::Point(x, y-this->kMarkerRadius_), cv::Point(x, y-this->kMarkerRadius_+10), color, thickness);
+    cv::line(markers, cv::Point(x+this->kMarkerRadius_, y), cv::Point(x+this->kMarkerRadius_-10, y), color, thickness);
+    cv::line(markers, cv::Point(x-this->kMarkerRadius_, y), cv::Point(x-this->kMarkerRadius_+10, y), color, thickness);
+
+    cv::putText(markers, std::to_string(kPosition[2]),
+        cv::Point(x+this->kMarkerRadius_, y+this->kMarkerRadius_),
+        cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
+  }
+
+  plot += markers/2;
+
+  return plot;
+}
+
+
+cv::Mat NetworkOutputVisualizer::MakeSugarBeetConfidenceVisualization(const NetworkOutput& kNetworkOutput) const {
+  cv::Mat sugar_beet_confidence = kNetworkOutput.SemanticClassConfidence(2);
+
+  if (sugar_beet_confidence.empty()) {
+    throw std::runtime_error("No sugar beet confidence provided.");
+  }
+
+  cv::convertScaleAbs(sugar_beet_confidence, sugar_beet_confidence, 255.0);
+  sugar_beet_confidence = this->Scale(sugar_beet_confidence, cv::INTER_NEAREST);
+
+  cv::Mat plot;
+  cv::applyColorMap(sugar_beet_confidence, plot, cv::COLORMAP_JET);
+
+  return plot;
+}
+
+
+cv::Mat NetworkOutputVisualizer::MakeWeedConfidenceVisualization(const NetworkOutput& kNetworkOutput) const {
+  cv::Mat weed_confidence = kNetworkOutput.SemanticClassConfidence(1);
+
+  if (weed_confidence.empty()) {
+    throw std::runtime_error("No weed confidence provided.");
+  }
+
+  cv::convertScaleAbs(weed_confidence, weed_confidence, 255.0);
+  weed_confidence = this->Scale(weed_confidence, cv::INTER_NEAREST);
+
+  cv::Mat plot;
+  cv::applyColorMap(weed_confidence, plot, cv::COLORMAP_JET);
 
   return plot;
 }
