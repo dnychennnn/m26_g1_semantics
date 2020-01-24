@@ -8,8 +8,8 @@ scale_max: 1.2
 shear_min: -0.2
 shear_max: 0.2
 
-translation_min: -50.0
-translation_max: 50.0
+translation_min: -200.0
+translation_max: 200.0
 
 brightness_min: -0.1
 brightness_max: 0.1
@@ -21,7 +21,7 @@ contrast_min: 0.1
 contrast_max: -0.1
 
 blur_min: 0.0
-blur_max: 3.0
+blur_max: 5.0
 
 noise_min: 0.0
 noise_max: 0.0

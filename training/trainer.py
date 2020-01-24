@@ -20,7 +20,8 @@ from training.evalmetrics import (compute_confusion_matrix,
                                   compute_stem_metrics,
                                   compute_metrics_from_confusion_matrix,
                                   plot_confusion_matrix,
-                                  precision_recall_curve_and_average_precision)
+                                  precision_recall_curve_and_average_precision,
+                                  compute_average_precision_stems)
 from training.postprocessing.stem_extraction import StemExtraction
 from training.postprocessing.semantic_labeling import make_classification_map
 
@@ -427,10 +428,16 @@ class Trainer:
         accumulated_confusion_matrix_stem_val = np.zeros((2,2), np.long)
         accumulated_deviation_val = 0.0
 
+        # max_num_batches = 10
+        # num_batches = max_num_batches # len(self.data_loader_val)
+
         num_batches = len(self.data_loader_val)
+
         all_semantic_outputs = np.zeros((num_batches, 3, self.target_height, self.target_width), dtype=np.float32)
-        # dimensions are num_batches, num_classes, height, width (batch_size is always one for evaluation)
         all_semantic_targets = np.zeros((num_batches, self.target_height, self.target_width), dtype=np.int)
+
+        all_stem_outputs = []
+        all_stem_targets = []
 
         for batch_index, (input_batch, target_batch) in enumerate(self.data_loader_val):
             self.model.eval()
@@ -483,7 +490,9 @@ class Trainer:
 
             # postprocessing
             stem_position_output_batch = self.stem_inference_module(stem_keypoint_output_batch, stem_offset_output_batch)
-            stem_position_target_batch = self.stem_inference_module(stem_keypoint_target_batch, stem_offset_target_batch)
+
+            all_stem_outputs.append(stem_position_output_batch[0].detach().cpu().numpy())
+            all_stem_targets.append(stem_position_target_batch[0][:stem_count_target_batch[0]].detach().cpu().numpy())
 
             path_for_plots = examples_dir/'sample_{:02d}'.format(batch_index)
             self.make_plots(path_for_plots,
@@ -540,6 +549,9 @@ class Trainer:
             path=self.current_checkpoint_dir,
             filename=self.current_checkpoint_name+'precision_recall')
 
+        # compute average precision of stem detection
+        average_precision_stems = compute_average_precision_stems(all_stem_outputs, all_stem_targets, self.tolerance_radius)
+
         # make plot of confusion matrix
         plot_confusion_matrix(self.current_checkpoint_dir,
                               accumulated_confusion_matrix_stem_val,
@@ -557,6 +569,8 @@ class Trainer:
         # NOTE we do not have a valid number of false negatives for stem detection, so some metrics computed here will not be valid
         metrics_stem_val = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_stem_val)
 
+        metrics_stem_val['average_precision'] = average_precision_stems.item()
+
         mean_average_precision = 0.5*(average_precisions[0]+average_precisions[1]) # without background
         mean_iou = np.mean(np.asarray(metrics_val['iou'])[1:]) # without background
 
@@ -568,6 +582,7 @@ class Trainer:
         self.summary_writer.add_scalar('ap_sugar_beet/val', average_precisions[1], global_step=self.current_checkpoint_index)
         self.summary_writer.add_scalar('ap_weed/val', average_precisions[0], global_step=self.current_checkpoint_index)
         self.summary_writer.add_scalar('mean_ap/val', mean_average_precision, global_step=self.current_checkpoint_index)
+        self.summary_writer.add_scalar('ap_stems/val', average_precision_stems.item(), global_step=self.current_checkpoint_index)
 
         print("Write metrics of split 'val' to yaml.")
         self.write_metrics_to_file(self.current_checkpoint_dir,

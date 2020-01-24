@@ -31,7 +31,7 @@ def compute_stem_metrics(stem_position_output, stem_position_target, tolerance_r
         target_count = stem_position_target[index_in_batch].shape[0]
 
         # bring stem position to numpy
-        stem_output_coords = stem_position_output[index_in_batch].cpu().detach().numpy()
+        stem_output_coords = stem_position_output[index_in_batch][:, :2].cpu().detach().numpy() # without scores
         stem_target_coords = stem_position_target[index_in_batch].cpu().detach().numpy()
 
         if output_count>0 and target_count>0:
@@ -225,9 +225,9 @@ def _single_class_precision_recall(semantic_outputs, target_mask, class_name, pa
     index_max_f1 = np.argmax(f1_scores)
     index_max_iou = np.argmax(ious)
 
-    print('average precision ({}): {:.4f}'.format(class_name, average_precision))
-    print('confidence threshold for maximum F1 {:.4f} ({}): {:.2f}'.format(f1_scores[index_max_f1], class_name, confidence_thresholds[index_max_f1]))
-    print('confidence threshold for maximum IoU {:.4f} ({}): {:.2f}'.format(ious[index_max_iou], class_name, confidence_thresholds[index_max_iou]))
+    print('Average precision ({}): {:.4f}'.format(class_name, average_precision))
+    print('Confidence threshold for maximum F1 {:.4f} ({}): {:.2f}'.format(f1_scores[index_max_f1], class_name, confidence_thresholds[index_max_f1]))
+    print('Confidence threshold for maximum IoU {:.4f} ({}): {:.2f}'.format(ious[index_max_iou], class_name, confidence_thresholds[index_max_iou]))
 
     # plotting
     indices = np.argsort(recalls)
@@ -266,4 +266,76 @@ def _single_class_precision_recall(semantic_outputs, target_mask, class_name, pa
     plt.close('all')
 
     return average_precision.item()
+
+
+def compute_average_precision_stems(stem_positions_output, stem_positions_target, tolerance_radius, eps=1e-6):
+    num_images = len(stem_positions_output)
+
+    num_confidence_thresholds = 101
+    confidence_thresholds = np.linspace(0.0, 1.0, num_confidence_thresholds)
+
+    actual_within_tolerance = []
+    predicted_within_tolerance = [] # maximum confidence along all predicted stems within tolerance
+
+    for index in range(num_images):
+        positions_output = stem_positions_output[index][:, :2][:, None, :]
+        positions_target = stem_positions_target[index][None, :, :]
+
+        differences = positions_output-positions_target
+        distances = np.linalg.norm(differences, axis=-1)
+
+        within_tolerance = distances<tolerance_radius
+        actual_within_tolerance.append(np.any(within_tolerance, axis=1))
+
+        num_targets = positions_target.shape[1]
+
+        if num_targets>0:
+            confidences_output = np.stack([stem_positions_output[index][:, 2]]*num_targets, axis=-1)
+            predicted_within_tolerance.append(np.amax(confidences_output*within_tolerance, axis=0))
+
+    actual_within_tolerance = np.concatenate(actual_within_tolerance)
+    predicted_within_tolerance = np.concatenate(predicted_within_tolerance)
+
+    confidences = np.concatenate([output[:, 2] for output in stem_positions_output])
+
+    precisions = np.zeros(num_confidence_thresholds, dtype=np.float)
+    recalls = np.zeros(num_confidence_thresholds, dtype=np.float)
+
+    for index, confidence_threshold in enumerate(confidence_thresholds):
+        greater_threshold = confidences>=confidence_threshold
+
+        true_positives = np.sum(np.logical_and(greater_threshold, actual_within_tolerance))
+        false_positives = np.sum(np.logical_and(greater_threshold, ~actual_within_tolerance))
+        false_negatives = np.sum(predicted_within_tolerance<confidence_threshold)
+
+        precisions[index] = true_positives/(true_positives+false_positives+eps)
+        recalls[index] = true_positives/(true_positives+false_negatives+eps)
+
+    num_recall_thresholds = 101
+    recall_thresholds = np.linspace(0.0, 1.0, num_recall_thresholds)
+
+    sum_precision = 0.0
+    for recall_threshold in recall_thresholds:
+        above_or_equal_threshold = recalls>=recall_threshold
+
+        if not np.any(above_or_equal_threshold):
+            # precision is zero
+            continue
+
+        # maximum precision with a recall equal or above threshold does contribute to average precision
+        sum_precision += np.max(precisions[above_or_equal_threshold])
+
+    # debug output
+    # plt.scatter(recalls, precisions, s=5, c=np.array([0.2, 0.2, 0.8]).reshape(1, -1))
+    # plt.show()
+
+    average_precision = sum_precision/num_recall_thresholds
+
+    f1_scores = 2.0*precisions*recalls/(precisions+recalls+eps)
+    index_max_f1 = np.argmax(f1_scores)
+
+    print('Average precision (stems): {:.4f}'.format(average_precision))
+    print('Score threshold for maximum F1 {:.4f} (stems): {:.2f}'.format(f1_scores[index_max_f1], confidence_thresholds[index_max_f1]))
+
+    return average_precision
 

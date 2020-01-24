@@ -394,8 +394,8 @@ class SugarBeetDataset(Dataset):
         for label in range(1, num_components):
             component_mask = np.logical_and(labels==label, mask)
             component_size = np.sum(component_mask).astype(np.float32)
-            weights[component_mask] = np.minimum(mean_component_size/component_size, 25.0)
-            # limit to 25 times the average weight
+            weights[component_mask] = np.minimum(mean_component_size/component_size, 10.0)
+            # limit to 10 times the average weight
 
         return weights
 
