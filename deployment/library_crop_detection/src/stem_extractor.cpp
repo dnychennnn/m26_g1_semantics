@@ -28,8 +28,10 @@ StemExtractor::StemExtractor(const StemExtractorParameters& kParameters):
     kKernelSizePeaks_{kParameters.kernel_size_peaks},
     kThresholdVotes_{kParameters.threshold_votes},
     kThresholdPeaks_{kParameters.threshold_peaks},
-    kVotesNormalization_{static_cast<float>(M_PI)*kParameters.keypoint_radius*kParameters.keypoint_radius} {}
+    kVotesNormalization_{static_cast<float>(M_PI)*kParameters.keypoint_radius*kParameters.keypoint_radius}
+{}
 
+StemExtractor::~StemExtractor() {}
 
 void StemExtractor::Infer(NetworkOutput& result) const {
   #ifdef DEBUG_MODE

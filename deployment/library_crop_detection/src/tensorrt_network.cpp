@@ -3,6 +3,9 @@
  *
  * Reference: https://github.com/PRBonn/bonnetal/blob/master/deploy/src/segmentation/lib/src/netTensorRT.cpp
  *
+ * Some parts of this implementation are strongly inspired by the original
+ * implementation of bonnetal, in particular the way buffer memory is allocated.
+ *
  * @version 0.1
  */
 
@@ -51,9 +54,9 @@ TensorrtNetwork::TensorrtNetwork(
 TensorrtNetwork::~TensorrtNetwork() {
   ASSERT_TENSORRT_AVAILABLE;
   #ifdef TENSORRT_AVAILABLE
+  this->FreeBufferMemory();
   if(this->context_){this->context_->destroy(); this->context_ = nullptr;}
   if(this->engine_){this->engine_->destroy(); this->engine_ = nullptr;}
-  this->FreeBufferMemory();
   #endif // TENSORRT_AVAILABLE
 }
 
@@ -382,6 +385,7 @@ void TensorrtNetwork::ReadBindingsAndAllocateBufferMemory() {
   }
 
   /*
+  // check if input size equals output size -- this is not the case any longer as we use an initial, strided convolution for downsampling
   if (!(this->input_width_==this->semantic_output_width_
         && this->input_width_==this->stem_keypoint_output_width_
         && this->input_width_==this->stem_offset_output_width_

@@ -1,7 +1,4 @@
 """Loss functions we use.
-
-Author:
-    Jan Quakernack
 """
 
 import torch
@@ -10,9 +7,25 @@ import numpy as np
 import cv2
 
 
+class SemanticLoss(nn.Module):
+    """Cross entropy loss with a weight per pixel to account of objects of different sizes.
+    """
+    def __init__(self, weight_background, weight_weed, weight_sugar_beet, ignore_index):
+        super().__init__()
+        self.class_weights = torch.tensor([weight_background, weight_weed, weight_sugar_beet],
+                                           dtype=torch.float32, requires_grad=False)
+        self.criterion = torch.nn.CrossEntropyLoss(ignore_index=ignore_index, weight=self.class_weights, reduction='none')
+
+
+    def forward(self, semantic_output_batch, semnatic_target_batch, semantic_loss_weight_batch):
+        loss_batch = self.criterion(semantic_output_batch, semnatic_target_batch)
+        loss_batch = torch.mean(semantic_loss_weight_batch*loss_batch)
+
+        return loss_batch
+
+
 class StemClassificationLoss(nn.Module):
-    """Binary cross entropy loss to distinguish keypoint (stem) pixels
-    from background pixels.
+    """Binary cross entropy loss to distinguish keypoint (stem) pixels from background pixels.
     """
 
     def __init__(self, weight_background, weight_stem):
@@ -32,9 +45,10 @@ class StemClassificationLoss(nn.Module):
         return loss
 
 
-
 class StemRegressionLoss(nn.Module):
     """Loss for x and y offset of all keypoint pixels.
+
+    Adapted from code originally written for MGE-MSR-P-S.
     """
 
     def __init__(self):
@@ -46,10 +60,10 @@ class StemRegressionLoss(nn.Module):
 
     def forward(self, stem_offset_output_batch, stem_keypoint_target_batch,
                 stem_offset_target_batch):
+        device = stem_offset_output_batch.device
+
         # apply tanh to have offsets in range -1, 1
         # normalized_offset_output_batch = self.tanh(stem_offset_output_batch)
-
-        device = stem_offset_output_batch.device
 
         # no tanh, use plain logits
         normalized_offset_output_batch = stem_offset_output_batch

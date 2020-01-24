@@ -1,8 +1,7 @@
 """
-Authors: Yung-Yu Chen, Jan Quakernack
-
-Note: Parts adapted from code originally written for MGE-MSR-P-S.
+Parts adapted from code originally written for MGE-MSR-P-S.
 """
+
 import torch
 from torch import nn
 import datetime
@@ -14,13 +13,14 @@ from torch.utils.tensorboard import SummaryWriter
 
 from training.models.model import Model
 from training.dataloader import SugarBeetDataset
-from training.losses import StemClassificationLoss, StemRegressionLoss
-from training import vis
+from training.losses import SemanticLoss, StemClassificationLoss, StemRegressionLoss
+from training import visualization
 from training import LOGS_DIR, MODELS_DIR, CUDA_DEVICE_NAME, load_config
 from training.evalmetrics import (compute_confusion_matrix,
                                   compute_stem_metrics,
                                   compute_metrics_from_confusion_matrix,
-                                  plot_confusion_matrix)
+                                  plot_confusion_matrix,
+                                  precision_recall_curve_and_average_precision)
 from training.postprocessing.stem_extraction import StemExtraction
 from training.postprocessing.semantic_labeling import make_classification_map
 
@@ -73,7 +73,6 @@ class Trainer:
                  weight_stem_background,
                  weight_stem,
                  keypoint_radius,
-                 stem_inference_device_option,
                  stem_inference_kernel_size_votes,
                  stem_inference_kernel_size_peaks,
                  stem_inference_threshold_votes,
@@ -98,6 +97,7 @@ class Trainer:
         self.tolerance_radius = tolerance_radius
         self.sugar_beet_threshold = sugar_beet_threshold
         self.weed_threshold = weed_threshold
+        self.stem_inference_threshold_peaks = stem_inference_threshold_peaks
 
         # init loss weights
         loss_norm = semantic_loss_weight+stem_loss_weight
@@ -125,8 +125,8 @@ class Trainer:
         self.model = model.to(self.device)
 
         # init losses
-        self.semantic_loss_function = nn.CrossEntropyLoss(ignore_index=3,
-                weight=torch.Tensor([self.weight_background, self.weight_weed, self.weight_sugar_beet])).to(self.device)
+        self.semantic_loss_function = SemanticLoss(
+                self.weight_background, self.weight_weed, self.weight_sugar_beet, ignore_index=3).to(self.device)
         self.stem_classification_loss_function = StemClassificationLoss(weight_background=weight_stem_background, weight_stem=weight_stem).to(self.device)
         self.stem_regression_loss_function = StemRegressionLoss().to(self.device)
 
@@ -142,8 +142,7 @@ class Trainer:
                 threshold_votes=stem_inference_threshold_votes,
                 threshold_peaks=stem_inference_threshold_peaks,
                 kernel_size_votes=stem_inference_kernel_size_votes,
-                kernel_size_peaks=stem_inference_kernel_size_peaks,
-                device_option=stem_inference_device_option).to(self.device)
+                kernel_size_peaks=stem_inference_kernel_size_peaks).to(self.device)
 
         # TODO (optional) have a way to resume training from a given checkpoint
 
@@ -220,17 +219,19 @@ class Trainer:
 
                 # unpack batch
                 semantic_target_batch = target_batch['semantic']
+                semantic_loss_weights_batch = target_batch['semantic_loss_weights']
                 stem_keypoint_target_batch = target_batch['stem_keypoint']
                 stem_offset_target_batch = target_batch['stem_offset']
 
                 # bring to device
                 input_batch = input_batch.to(self.device)
+                semantic_loss_weights_batch = semantic_loss_weights_batch.to(self.device)
                 semantic_target_batch = semantic_target_batch.to(self.device)
                 stem_keypoint_target_batch = stem_keypoint_target_batch.to(self.device)
                 stem_offset_target_batch = stem_offset_target_batch.to(self.device)
 
                 # debug output
-                # input_image = vis.tensor_to_false_color(input_batch[0, :3], input_batch[0, 3],
+                # input_image = visualization.tensor_to_false_color(input_batch[0, :3], input_batch[0, 3],
                                                         # **self.dataset_train.normalization_rgb_dict,
                                                         # **self.dataset_train.normalization_nir_dict)
                 # cv2.imshow('input', input_image)
@@ -241,6 +242,7 @@ class Trainer:
 
                 # backward pass
                 losses = self.compute_losses(semantic_output_batch=semantic_output_batch,
+                                             semantic_loss_weights_batch=semantic_loss_weights_batch,
                                              stem_keypoint_output_batch=stem_keypoint_output_batch,
                                              stem_offset_output_batch=stem_offset_output_batch,
                                              semantic_target_batch=semantic_target_batch,
@@ -277,6 +279,7 @@ class Trainer:
 
     def compute_losses(self,
                        semantic_output_batch,
+                       semantic_loss_weights_batch,
                        stem_keypoint_output_batch,
                        stem_offset_output_batch,
                        semantic_target_batch,
@@ -286,7 +289,8 @@ class Trainer:
         # compute losses
         semantic_loss = (self.semantic_loss_weight
                          *self.semantic_loss_function(semantic_output_batch,
-                                                      semantic_target_batch))
+                                                      semantic_target_batch,
+                                                      semantic_loss_weights_batch))
 
         stem_classification_loss = (self.stem_classification_loss_weight
                                     *self.stem_classification_loss_function(stem_keypoint_output_batch=stem_keypoint_output_batch,
@@ -315,17 +319,17 @@ class Trainer:
 
 
     def show_images_for_debugging(self, input_slice, semantic_output, semantic_target, stem_keypoint_output, stem_offset_output):
-        image_false_color = vis.tensor_to_false_color(input_slice[:3], input_slice[3],
+        image_false_color = visualization.tensor_to_false_color(input_slice[:3], input_slice[3],
             **self.dataset_train.normalization_rgb_dict, **self.dataset_train.normalization_nir_dict)
-        plot_semantics = vis.make_plot_from_semantic_output(input_rgb=input_slice[:3],
+        plot_semantics = visualization.make_plot_from_semantic_output(input_rgb=input_slice[:3],
                                                             input_nir=input_slice[3],
                                                             semantic_output=semantic_output,
-                                                            semantic_target=semantic_target,
+                                                            semantic_target=None, # semantic_target,
                                                             apply_softmax=True,
                                                             **self.dataset_train.normalization_rgb_dict,
                                                             **self.dataset_train.normalization_nir_dict)
 
-        plot_stem_keypoint_offset = vis.make_plot_from_stem_keypoint_offset_output(input_rgb=input_slice[:3],
+        plot_stem_keypoint_offset = visualization.make_plot_from_stem_keypoint_offset_output(input_rgb=input_slice[:3],
                                                                                    input_nir=input_slice[3],
                                                                                    stem_keypoint_output=stem_keypoint_output,
                                                                                    stem_offset_output=stem_offset_output,
@@ -374,8 +378,13 @@ class Trainer:
                                   losses=losses_train,
                                   filename=self.current_checkpoint_name+'_losses_training.yaml')
 
-        print("Evaluate on 'val' split.")
-        self.evaluate_on_checkpoint(test_run=test_run)
+        # print("Evaluate on 'val' split.")
+        try:
+            self.evaluate_on_checkpoint(test_run=test_run)
+        except Exception as error:
+            print('Some error occured while evaluation:')
+            print(error)
+            pass
 
         self.current_checkpoint_index += 1
 
@@ -418,17 +427,25 @@ class Trainer:
         accumulated_confusion_matrix_stem_val = np.zeros((2,2), np.long)
         accumulated_deviation_val = 0.0
 
+        num_batches = len(self.data_loader_val)
+        all_semantic_outputs = np.zeros((num_batches, 3, self.target_height, self.target_width), dtype=np.float32)
+        # dimensions are num_batches, num_classes, height, width (batch_size is always one for evaluation)
+        all_semantic_targets = np.zeros((num_batches, self.target_height, self.target_width), dtype=np.int)
+
         for batch_index, (input_batch, target_batch) in enumerate(self.data_loader_val):
             self.model.eval()
 
             # unpack batch
             semantic_target_batch = target_batch['semantic']
+            semantic_loss_weights_batch = target_batch['semantic_loss_weights']
             stem_keypoint_target_batch = target_batch['stem_keypoint']
             stem_offset_target_batch = target_batch['stem_offset']
             stem_position_target_batch = target_batch['stem_position']
             stem_count_target_batch = target_batch['stem_count']
 
+            # bring to device
             input_batch = input_batch.to(self.device)
+            semantic_loss_weights_batch = semantic_loss_weights_batch.to(self.device)
             semantic_target_batch = semantic_target_batch.to(self.device)
             stem_keypoint_target_batch = stem_keypoint_target_batch.to(self.device)
             stem_offset_target_batch = stem_offset_target_batch.to(self.device)
@@ -437,7 +454,7 @@ class Trainer:
                                                                     stem_count_target_batch)
 
             if test_run:
-                image_false_color = vis.tensor_to_false_color(input_batch[0, :3], input_batch[0, 3],
+                image_false_color = visualization.tensor_to_false_color(input_batch[0, :3], input_batch[0, 3],
                         **self.dataset_val.normalization_rgb_dict, **self.dataset_val.normalization_nir_dict)
                 cv2.imshow('input', image_false_color)
                 # cv2.waitKey()
@@ -447,6 +464,7 @@ class Trainer:
 
             # compute losses
             losses = self.compute_losses(semantic_output_batch=semantic_output_batch,
+                                         semantic_loss_weights_batch=semantic_loss_weights_batch,
                                          stem_keypoint_output_batch=stem_keypoint_output_batch,
                                          stem_offset_output_batch=stem_offset_output_batch,
                                          semantic_target_batch=semantic_target_batch,
@@ -454,6 +472,14 @@ class Trainer:
                                          stem_offset_target_batch=stem_offset_target_batch)
 
             self.accumulate_losses(losses, accumulated_losses_val)
+
+            # apply sigmoid, softmax to classification outputs before further evaluation
+            semantic_output_batch = torch.softmax(semantic_output_batch, dim=1)
+            stem_keypoint_output_batch = torch.sigmoid(stem_keypoint_output_batch)
+
+            # rembember output confidences and targets to calculate precision-recall-curve
+            all_semantic_outputs[batch_index] = semantic_output_batch[0].detach().cpu().numpy()
+            all_semantic_targets[batch_index] = semantic_target_batch[0].detach().cpu().numpy()
 
             # postprocessing
             stem_position_output_batch = self.stem_inference_module(stem_keypoint_output_batch, stem_offset_output_batch)
@@ -508,6 +534,13 @@ class Trainer:
                               normalize=False,
                               filename=self.current_checkpoint_name+'_val.png')
 
+        # make plot of class-wise precision-recall curve and compute average precision
+        average_precisions = precision_recall_curve_and_average_precision(
+            all_semantic_outputs, all_semantic_targets,
+            path=self.current_checkpoint_dir,
+            filename=self.current_checkpoint_name+'precision_recall')
+
+        # make plot of confusion matrix
         plot_confusion_matrix(self.current_checkpoint_dir,
                               accumulated_confusion_matrix_stem_val,
                               normalize=False,
@@ -517,10 +550,14 @@ class Trainer:
         # calculate metrics on accumulated confusion matrix
         metrics_val = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_val)
 
+        # add average precision to metric dict
+        metrics_val['average_precision'] = [-1.0]+average_precisions # no average precision for background
+
+        # calculate metrics for stem detection
         # NOTE we do not have a valid number of false negatives for stem detection, so some metrics computed here will not be valid
         metrics_stem_val = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_stem_val)
 
-        mean_accuracy = np.mean(np.asarray(metrics_val['accuracy'])[1:]) # without background
+        mean_average_precision = 0.5*(average_precisions[0]+average_precisions[1]) # without background
         mean_iou = np.mean(np.asarray(metrics_val['iou'])[1:]) # without background
 
         print("Write metrics of split 'val' to tensorboard log.")
@@ -528,6 +565,9 @@ class Trainer:
         self.summary_writer.add_scalar('iou_weed/val', metrics_val['iou'][1], global_step=self.current_checkpoint_index)
         self.summary_writer.add_scalar('iou_sugar_beet/val', metrics_val['iou'][2], global_step=self.current_checkpoint_index)
         self.summary_writer.add_scalar('mean_iou/val', metrics_val['iou'][2], global_step=self.current_checkpoint_index)
+        self.summary_writer.add_scalar('ap_sugar_beet/val', average_precisions[1], global_step=self.current_checkpoint_index)
+        self.summary_writer.add_scalar('ap_weed/val', average_precisions[0], global_step=self.current_checkpoint_index)
+        self.summary_writer.add_scalar('mean_ap/val', mean_average_precision, global_step=self.current_checkpoint_index)
 
         print("Write metrics of split 'val' to yaml.")
         self.write_metrics_to_file(self.current_checkpoint_dir,
@@ -536,16 +576,16 @@ class Trainer:
                                    metrics_stem_val, class_names=['stem', 'no_stem'],
                                    filename=self.current_checkpoint_name+'_stem_val.yaml')
 
-        print('  Mean IoU (without background): {:.04f}'.format(mean_iou))
-        print("  IoU 'background': {:.04f}".format(metrics_val['iou'][0]))
-        print("  IoU 'weed': {:.04f}".format(metrics_val['iou'][1]))
-        print("  IoU 'sugar beet': {:.04f}".format(metrics_val['iou'][2]))
-        print('  Mean accuracy (without background): {:.04f}'.format(mean_accuracy))
-        print("  Accuracy 'background': {:.04f}".format(metrics_val['accuracy'][0]))
-        print("  Accuracy 'weed': {:.04f}".format(metrics_val['accuracy'][1]))
-        print("  Accuracy 'sugar beet': {:.04f}".format(metrics_val['accuracy'][2]))
-        print("  Accuracy stem detection with {:.01f} px tolerance: {:.04f}".format(
-            self.tolerance_radius, metrics_stem_val['accuracy'][0]))
+        print('  Mean AP (without background): {:.04f}'.format(mean_average_precision))
+        print("  AP 'weed': {:.04f}".format(average_precisions[0]))
+        print("  AP 'sugar beet': {:.04f}".format(average_precisions[1]))
+        print('  Mean IoU@({:.02f}, {:.02f}) (without background): {:.04f}'.format(self.weed_threshold, self.sugar_beet_threshold, mean_iou))
+        print("  IoU@{:.02f} 'weed': {:.04f}".format(self.weed_threshold, metrics_val['iou'][1]))
+        print("  IoU@{:.02f} 'sugar beet': {:.04f}".format(self.sugar_beet_threshold, metrics_val['iou'][2]))
+        print("  Precision@{:.02f} stem detection with {:.01f} px tolerance: {:.04f}".format(self.stem_inference_threshold_peaks,
+            self.tolerance_radius, metrics_stem_val['precision'][0]))
+        print("  Recall@{:.02f} stem detection with {:.01f} px tolerance: {:.04f}".format(self.stem_inference_threshold_peaks,
+            self.tolerance_radius, metrics_stem_val['recall'][0]))
         print("  Mean deviation stems within {:.01f} px tolerance: {:.04f} px".format(
             self.tolerance_radius, accumulated_deviation_val/(accumulated_confusion_matrix_stem_val[0, 0]+1e-6)))
 
@@ -564,12 +604,12 @@ class Trainer:
     def make_plots(self, path, input_slice, semantic_output, semantic_target, semantic_predicted, stem_keypoint_output, stem_offset_output, stem_position_output, stem_position_target, test_run):
         """Make plots and write images.
         """
-        image_bgr = vis.tensor_to_bgr(input_slice[:3], **self.dataset_val.normalization_rgb_dict)
-        image_nir = vis.tensor_to_single_channel(input_slice[3], **self.dataset_val.normalization_nir_dict)
-        image_false_color = vis.tensor_to_false_color(input_slice[:3], input_slice[3],
+        image_bgr = visualization.tensor_to_bgr(input_slice[:3], **self.dataset_val.normalization_rgb_dict)
+        image_nir = visualization.tensor_to_single_channel(input_slice[3], **self.dataset_val.normalization_nir_dict)
+        image_false_color = visualization.tensor_to_false_color(input_slice[:3], input_slice[3],
                 **self.dataset_val.normalization_rgb_dict, **self.dataset_val.normalization_nir_dict)
 
-        plot_semantics = vis.make_plot_from_semantic_output(input_rgb=input_slice[:3],
+        plot_semantics = visualization.make_plot_from_semantic_output(input_rgb=input_slice[:3],
                                                             input_nir=input_slice[3],
                                                             semantic_output=semantic_output,
                                                             semantic_target=None,
@@ -577,19 +617,19 @@ class Trainer:
                                                             **self.dataset_val.normalization_rgb_dict,
                                                             **self.dataset_val.normalization_nir_dict)
 
-        plot_semantics_target_labels = vis.make_plot_from_semantic_labels(input_rgb=input_slice[:3],
+        plot_semantics_target_labels = visualization.make_plot_from_semantic_labels(input_rgb=input_slice[:3],
                                                                           input_nir=input_slice[3],
                                                                           semantic_labels=semantic_target,
                                                                           **self.dataset_val.normalization_rgb_dict,
                                                                           **self.dataset_val.normalization_nir_dict)
 
-        plot_semantics_predicted_labels = vis.make_plot_from_semantic_labels(input_rgb=input_slice[:3],
+        plot_semantics_predicted_labels = visualization.make_plot_from_semantic_labels(input_rgb=input_slice[:3],
                                                                              input_nir=input_slice[3],
                                                                              semantic_labels=semantic_predicted,
                                                                              **self.dataset_val.normalization_rgb_dict,
                                                                              **self.dataset_val.normalization_nir_dict)
 
-        plot_stems_keypoint_offset = vis.make_plot_from_stem_keypoint_offset_output(input_rgb=input_slice[:3],
+        plot_stems_keypoint_offset = visualization.make_plot_from_stem_keypoint_offset_output(input_rgb=input_slice[:3],
                                                                                     input_nir=input_slice[3],
                                                                                     stem_keypoint_output=stem_keypoint_output,
                                                                                     stem_offset_output=stem_offset_output,
@@ -599,7 +639,7 @@ class Trainer:
                                                                                     **self.dataset_val.normalization_rgb_dict,
                                                                                     **self.dataset_val.normalization_nir_dict)
 
-        plot_stems = vis.make_plot_from_stem_output(input_rgb=input_slice[:3],
+        plot_stems = visualization.make_plot_from_stem_output(input_rgb=input_slice[:3],
                                                     input_nir=input_slice[3],
                                                     stem_position_output=stem_position_output,
                                                     stem_position_target=stem_position_target,

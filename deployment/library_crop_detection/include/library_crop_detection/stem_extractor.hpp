@@ -24,6 +24,7 @@ class StemExtractor {
 
 public:
   StemExtractor(const StemExtractorParameters& kParameters);
+  ~StemExtractor();
   void Infer(NetworkOutput& result) const;
 
 private:

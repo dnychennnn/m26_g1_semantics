@@ -2,8 +2,8 @@
 
 Reference: https://github.com/PingoLH/Pytorch-HarDNet
 
-Code is very similar to the reference implementation on github,
-naming was adopted for consistency and to clarify things for ourselves.
+Code is very similar to the reference on github.
+Naming was adopted for consistency and to clarify things for ourselves.
 """
 
 import torch

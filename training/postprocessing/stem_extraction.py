@@ -5,27 +5,15 @@ import cv2
 import warnings
 from time import process_time
 
-# try to load cpp extensions for faster inference of stem positions
-CPU_OPTION_AVAILABLE, CUDA_OPTION_AVAILABLE = True, True
-try:
-    from stem_inference_cpu import cast_votes_cpu
-except ImportError:
-    warnings.warn("C++ extension for stem inference on CPU not found.")
-    CPU_OPTION_AVAILABLE = False
-try:
-    from stem_inference_cuda import cast_votes_cuda
-except ImportError:
-    warnings.warn("C++/CUDA extension for stem inference on CUDA device not found.")
-    CUDA_OPTION_AVAILABLE = False
-
-
 
 class StemExtraction(nn.Module):
     """Infere stem positions form predicted keypoints an offsets.
+
+    Adapted from code originally written for MGE-MSR-P-S.
     """
 
     def __init__(self, input_width, input_height, keypoint_radius, threshold_votes,
-                 threshold_peaks, kernel_size_votes, kernel_size_peaks, device_option):
+                 threshold_peaks, kernel_size_votes, kernel_size_peaks):
         """
         Args:
             threshold_votes (float): Pixels with a keypoint confidence below this value
@@ -38,11 +26,8 @@ class StemExtraction(nn.Module):
         """
         super().__init__()
 
-        assert device_option in ['pytorch', 'cpu', 'cuda']
         assert kernel_size_votes>0 and kernel_size_votes%2!=0
         assert kernel_size_peaks>0 and kernel_size_peaks%2!=0
-
-        self.device_option = device_option
 
         self.input_width = input_width
         self.input_height = input_height
@@ -83,18 +68,7 @@ class StemExtraction(nn.Module):
         votes_ys = votes_ys.detach()
         votes_weights = stem_keypoint_output[:, 0].detach()
 
-        if self.device_option=='cpu' and CPU_OPTION_AVAILABLE:
-          device = votes_xs.device
-          votes_xs = votes_xs.detach().cpu()
-          votes_ys = votes_ys.detach().cpu()
-          votes_weights = votes_weights.cpu()
-          votes = cast_votes_cpu(votes_xs, votes_ys, votes_weights, self.threshold_votes).to(device)
-        elif self.device_option=='cuda' and CUDA_OPTION_AVAILABLE:
-          votes = cast_votes_cuda(votes_xs, votes_ys, votes_weights, self.threshold_votes)
-        else:
-          if self.device_option!='pytorch':
-              warnings.warn("Stem inference device option '{}' not recognized. Using option 'pytorch'.")
-          votes = self.cast_votes_pytorch(votes_xs, votes_ys, votes_weights)
+        votes = self.cast_votes_pytorch(votes_xs, votes_ys, votes_weights)
 
         # normalize by size of keypoint disk
         votes /= np.pi*self.keypoint_radius*self.keypoint_radius
@@ -114,9 +88,6 @@ class StemExtraction(nn.Module):
 
 
     def cast_votes_pytorch(self, votes_xs, votes_ys, votes_weights):
-        """
-        Note: Adapted from code originally written for MGE-MSR-P-S.
-        """
         batch_size = votes_weights.shape[0]
         device = votes_weights.device
 

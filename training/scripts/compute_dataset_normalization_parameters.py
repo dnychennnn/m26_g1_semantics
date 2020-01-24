@@ -1,7 +1,5 @@
 """Script to get mean and standard deviation of all
 images in sugar beet dataset.
-
-Author: Jan Quakernack
 """
 
 import click
@@ -12,8 +10,9 @@ from training.dataloader import SugarBeetDataset
 
 
 @click.command()
-def compute_dataset_normalization_parameters():
-    dataset = SugarBeetDataset.from_config()
+@click.argument('architecture-name', type=str, default='densenet56')
+def compute_dataset_normalization_parameters(architecture_name):
+    dataset = SugarBeetDataset.from_config(architecture_name, 'train')
     filenames = dataset.filenames
     num_images = len(filenames)
 
