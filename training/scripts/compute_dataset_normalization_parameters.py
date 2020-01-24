@@ -1,7 +1,5 @@
 """Script to get mean and standard deviation of all
 images in sugar beet dataset.
-
-Author: Jan Quakernack
 """
 
 import click

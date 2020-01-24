@@ -11,8 +11,8 @@ stem_regression_loss_weight: 1.0
 
 # class weights for semantic segmentation
 weight_background: 1.0
-weight_weed: 10.0
-weight_sugar_beet: 10.0
+weight_weed: 20.0
+weight_sugar_beet: 5.0
 
 # class weights for stem keypoint detection
 weight_stem_background: 1.0
@@ -20,8 +20,8 @@ weight_stem: 10.0
 
 stem_inference_device_option: 'pytorch' # 'cuda' (= CUDA), 'cpu' (= Pytorch C++ API), 'pytorch' (= pytorch index_put)
 
-sugar_beet_threshold: 0.8 # confidence threshold to be assigned to this class
-weed_threshold: 0.8 # sugar beets treated with priority for thresholds <= 0.5
+sugar_beet_threshold: 0.5 # confidence threshold to be assigned to this class
+weed_threshold: 0.5 # sugar beets treated with priority for thresholds <= 0.5
 
 stem_inference_threshold_votes: 0.001 # pixel with a keypoint confidence below this value do not cast votes at all
 stem_inference_threshold_peaks: 0.1 # only pixels with accumulated votes larger than this value are considered as stems
