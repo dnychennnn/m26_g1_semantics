@@ -78,9 +78,7 @@ CropDetection::CropDetection(ros::NodeHandle& node_handle,
 }
 
 
-CropDetection::~CropDetection() {
-
-}
+CropDetection::~CropDetection() {}
 
 
 void CropDetection::Callback(const sensor_msgs::ImageConstPtr& kRgbImageMessage,
