@@ -74,7 +74,6 @@ class Trainer:
                  weight_stem_background,
                  weight_stem,
                  keypoint_radius,
-                 stem_inference_device_option,
                  stem_inference_kernel_size_votes,
                  stem_inference_kernel_size_peaks,
                  stem_inference_threshold_votes,
@@ -144,8 +143,7 @@ class Trainer:
                 threshold_votes=stem_inference_threshold_votes,
                 threshold_peaks=stem_inference_threshold_peaks,
                 kernel_size_votes=stem_inference_kernel_size_votes,
-                kernel_size_peaks=stem_inference_kernel_size_peaks,
-                device_option=stem_inference_device_option).to(self.device)
+                kernel_size_peaks=stem_inference_kernel_size_peaks).to(self.device)
 
         # TODO (optional) have a way to resume training from a given checkpoint
 
