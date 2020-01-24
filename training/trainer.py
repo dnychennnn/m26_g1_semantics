@@ -1,8 +1,7 @@
 """
-Authors: Yung-Yu Chen, Jan Quakernack
-
-Note: Parts adapted from code originally written for MGE-MSR-P-S.
+Parts adapted from code originally written for MGE-MSR-P-S.
 """
+
 import torch
 from torch import nn
 import datetime
@@ -15,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 from training.models.model import Model
 from training.dataloader import SugarBeetDataset
 from training.losses import SemanticLoss, StemClassificationLoss, StemRegressionLoss
-from training import vis
+from training import visualization
 from training import LOGS_DIR, MODELS_DIR, CUDA_DEVICE_NAME, load_config
 from training.evalmetrics import (compute_confusion_matrix,
                                   compute_stem_metrics,
@@ -232,7 +231,7 @@ class Trainer:
                 stem_offset_target_batch = stem_offset_target_batch.to(self.device)
 
                 # debug output
-                # input_image = vis.tensor_to_false_color(input_batch[0, :3], input_batch[0, 3],
+                # input_image = visualization.tensor_to_false_color(input_batch[0, :3], input_batch[0, 3],
                                                         # **self.dataset_train.normalization_rgb_dict,
                                                         # **self.dataset_train.normalization_nir_dict)
                 # cv2.imshow('input', input_image)
@@ -320,9 +319,9 @@ class Trainer:
 
 
     def show_images_for_debugging(self, input_slice, semantic_output, semantic_target, stem_keypoint_output, stem_offset_output):
-        image_false_color = vis.tensor_to_false_color(input_slice[:3], input_slice[3],
+        image_false_color = visualization.tensor_to_false_color(input_slice[:3], input_slice[3],
             **self.dataset_train.normalization_rgb_dict, **self.dataset_train.normalization_nir_dict)
-        plot_semantics = vis.make_plot_from_semantic_output(input_rgb=input_slice[:3],
+        plot_semantics = visualization.make_plot_from_semantic_output(input_rgb=input_slice[:3],
                                                             input_nir=input_slice[3],
                                                             semantic_output=semantic_output,
                                                             semantic_target=None, # semantic_target,
@@ -330,7 +329,7 @@ class Trainer:
                                                             **self.dataset_train.normalization_rgb_dict,
                                                             **self.dataset_train.normalization_nir_dict)
 
-        plot_stem_keypoint_offset = vis.make_plot_from_stem_keypoint_offset_output(input_rgb=input_slice[:3],
+        plot_stem_keypoint_offset = visualization.make_plot_from_stem_keypoint_offset_output(input_rgb=input_slice[:3],
                                                                                    input_nir=input_slice[3],
                                                                                    stem_keypoint_output=stem_keypoint_output,
                                                                                    stem_offset_output=stem_offset_output,
@@ -455,7 +454,7 @@ class Trainer:
                                                                     stem_count_target_batch)
 
             if test_run:
-                image_false_color = vis.tensor_to_false_color(input_batch[0, :3], input_batch[0, 3],
+                image_false_color = visualization.tensor_to_false_color(input_batch[0, :3], input_batch[0, 3],
                         **self.dataset_val.normalization_rgb_dict, **self.dataset_val.normalization_nir_dict)
                 cv2.imshow('input', image_false_color)
                 # cv2.waitKey()
@@ -605,12 +604,12 @@ class Trainer:
     def make_plots(self, path, input_slice, semantic_output, semantic_target, semantic_predicted, stem_keypoint_output, stem_offset_output, stem_position_output, stem_position_target, test_run):
         """Make plots and write images.
         """
-        image_bgr = vis.tensor_to_bgr(input_slice[:3], **self.dataset_val.normalization_rgb_dict)
-        image_nir = vis.tensor_to_single_channel(input_slice[3], **self.dataset_val.normalization_nir_dict)
-        image_false_color = vis.tensor_to_false_color(input_slice[:3], input_slice[3],
+        image_bgr = visualization.tensor_to_bgr(input_slice[:3], **self.dataset_val.normalization_rgb_dict)
+        image_nir = visualization.tensor_to_single_channel(input_slice[3], **self.dataset_val.normalization_nir_dict)
+        image_false_color = visualization.tensor_to_false_color(input_slice[:3], input_slice[3],
                 **self.dataset_val.normalization_rgb_dict, **self.dataset_val.normalization_nir_dict)
 
-        plot_semantics = vis.make_plot_from_semantic_output(input_rgb=input_slice[:3],
+        plot_semantics = visualization.make_plot_from_semantic_output(input_rgb=input_slice[:3],
                                                             input_nir=input_slice[3],
                                                             semantic_output=semantic_output,
                                                             semantic_target=None,
@@ -618,19 +617,19 @@ class Trainer:
                                                             **self.dataset_val.normalization_rgb_dict,
                                                             **self.dataset_val.normalization_nir_dict)
 
-        plot_semantics_target_labels = vis.make_plot_from_semantic_labels(input_rgb=input_slice[:3],
+        plot_semantics_target_labels = visualization.make_plot_from_semantic_labels(input_rgb=input_slice[:3],
                                                                           input_nir=input_slice[3],
                                                                           semantic_labels=semantic_target,
                                                                           **self.dataset_val.normalization_rgb_dict,
                                                                           **self.dataset_val.normalization_nir_dict)
 
-        plot_semantics_predicted_labels = vis.make_plot_from_semantic_labels(input_rgb=input_slice[:3],
+        plot_semantics_predicted_labels = visualization.make_plot_from_semantic_labels(input_rgb=input_slice[:3],
                                                                              input_nir=input_slice[3],
                                                                              semantic_labels=semantic_predicted,
                                                                              **self.dataset_val.normalization_rgb_dict,
                                                                              **self.dataset_val.normalization_nir_dict)
 
-        plot_stems_keypoint_offset = vis.make_plot_from_stem_keypoint_offset_output(input_rgb=input_slice[:3],
+        plot_stems_keypoint_offset = visualization.make_plot_from_stem_keypoint_offset_output(input_rgb=input_slice[:3],
                                                                                     input_nir=input_slice[3],
                                                                                     stem_keypoint_output=stem_keypoint_output,
                                                                                     stem_offset_output=stem_offset_output,
@@ -640,7 +639,7 @@ class Trainer:
                                                                                     **self.dataset_val.normalization_rgb_dict,
                                                                                     **self.dataset_val.normalization_nir_dict)
 
-        plot_stems = vis.make_plot_from_stem_output(input_rgb=input_slice[:3],
+        plot_stems = visualization.make_plot_from_stem_output(input_rgb=input_slice[:3],
                                                     input_nir=input_slice[3],
                                                     stem_position_output=stem_position_output,
                                                     stem_position_target=stem_position_target,

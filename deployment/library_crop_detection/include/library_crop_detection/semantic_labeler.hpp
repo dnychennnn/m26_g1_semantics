@@ -23,6 +23,12 @@ class SemanticLabeler {
 
 public:
   SemanticLabeler(const SemanticLabelerParameters& kParameters);
+
+  /*!
+   * Assigns a semantic label based on the class confidences output by the network.
+   *
+   * In out implementation, this reduces to a threshold operation.
+   */
   void Infer(NetworkOutput& result) const;
 
 private:

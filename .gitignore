@@ -2,6 +2,7 @@ README.html
 
 training/dataset/
 pretrain_try.py
+report/**/*
 
 **/.vscode/**/*
 **/__pycache__/**/*

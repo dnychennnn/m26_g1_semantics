@@ -7,12 +7,10 @@ Semantic segmentation and stem detection for agricultural robotics using ROS.
 ```
 .
 ├── README.md
-│
-├── training (Python package for training of neural network with Pytorch goes here)
-│
-│
-└── deployment (ROS package written in C++ goes here)
-
+├── training (Python package for training)
+└── deployment
+    ├── library_crop_detection (C++ library for infernce)
+    └── ros_crop_detection (ROS node wrapping around library)
 ```
 
 ### Training phase
@@ -35,15 +33,6 @@ Add the python package to your python path:
 export PYTHONPATH="${PYTHONPATH}:/path/to/your/clone/of/m26_g1_semantics/"
 ```
 
-We use our own small C++/CUDA Pytorch extension for inference of the stem positions. Build it with:
-
-```
-cd training/postprocessing/stem_inference_cpp/
-python setup.py install
-```
-
-The code should run without this step completed, but you will get a warning.
-
 #### Run
 
 Training parameters are defined in `training/configs/training.yaml`. To train with these parameters, use:
@@ -64,6 +53,14 @@ If you want to do evaluation only:
 python training/script/train.py --only-eval
 ```
 
+Not the default architecture:
+
+```
+python training/script/train.py hardnet56
+```
+
+Requires a `configs/hardnet56.yaml` to exists.
+
 #### Freeze a model to deploy
 
 As .onnx to load with TensorRT:
@@ -75,10 +72,10 @@ python training/scripts/export_model.py -t onnx
 As .pt to load with Pytorch/Torch:
 
 ```
-python training/scripts/export_model.py -t pt --device cpu
+python training/scripts/export_model.py -t pt -d cpu
 ```
 
-Note the option `--device cpu`. We did only test the CPU version of Pytorch/Torch for deployment (see below).
+Note the option `-d cpu`. We tested the CPU version of Pytorch/Torch for deployment only and assume the TensorRT is used for inference on a GPU.
 
 ### Deployment phase
 
@@ -91,13 +88,12 @@ export M26_G1_SEMANTICS_MODELS_DIR="/path/to/folder/with/model/weight/files/"
 
 ##### TensorRT
 
-We currently work with CUDA 10.1 and TensorRT 6.0.1.5.
+We use CUDA 10.1 and TensorRT 6.0.1.5.
 
 * [TensorRT with installation instructions](https://github.com/NVIDIA/TensorRT)
-* [TensorRT backend for ONNX](https://github.com/onnx/onnx-tensorrt)
+* [TensorRT parser for ONNX](https://github.com/onnx/onnx-tensorrt)
 
-Our CMake files use hints set by environment variables to locate TensorRT related files.
-If it is necessary to set these variables will propapby depend on the way TensorRT is installed on your system.
+Our CMake files use hints set by environment variables to locate TensorRT  if it is not installed system-wide:
 
 ```
 export NVINFER_INCLUDE_DIRS="/path/to/TensorRT/include/"
@@ -107,7 +103,8 @@ export NVONNXPARSER_INCLUDE_DIRS="/path/to/TensorRT/parsers/onnx/"
 export NVONNXPARSER_LIBRARY_PATH="/path/to/TensorRT/build/out/"
 ```
 
-It is possible to build the code without having TensorRT installed. To explicitly build without TensorRT,
+It is possible to build the code without having TensorRT installed.
+To explicitly build without TensorRT,
 change the following line in the `CMakeLists.txt`:
 
 ```
@@ -125,25 +122,37 @@ set(TENSORRT_ENABLED FALSE)
 A build of Libtorch can be downloaded from the [pytorch website](https://pytorch.org/).
 Select `Package=Libtorch`, `Language=C++` and `CUDA=None`, which will mean to run the network
 on the CPU. Add the libaries to your library path and set an environment variable which allows
-our CMake script to locate Torch.
+our CMake script to locate Torch if it is not installed system-wide:
 
 ```
 export TORCH_LIBRARY_PATH="/path/to/libtorch/libtorch/lib/"
 export LD_LIBRARY_PATH=${TORCH_LIBRARY_PATH}:$LD_LIBRARY_PATH
 
-export LIBTORCH_CMAKE_MODULE_PATH="/home/jan/ge/tools/libtorch/share/cmake/"
+export LIBTORCH_CMAKE_MODULE_PATH="/path/to/libtorch/share/cmake/"
 ```
 
-### Coding style
+If there are problems with the prebuild library, you may need to build from source.
 
-**Open for discussion!**
+### Library demo
 
-#### C++
+To run a short demo:
 
-* [Google C++ Style Guide](https://google.github.io/styleguide/cppguide.html)
+```
+cd deployment/library_crop_detection/
+rosrun library_crop_detection tensorrt_network_demo
+rosrun library_crop_detection pytorch_network_demo
+```
 
-#### Python
+Make sure the model as available in the required format (`.onnx`, `.pt`) under `M26_G1_SEMANTICS_MODELS_DIR` using the provided export script.
 
-* [PEP 8 Style Guide for Python Code](https://www.python.org/dev/peps/pep-0008/)
-* [Google Python Style Guide](https://github.com/google/styleguide/blob/gh-pages/pyguide.md)
-* [Google Style Dostrings](https://github.com/google/styleguide/blob/gh-pages/pyguide.md#38-comments-and-docstrings)
+Note `rosrun` is only used here for convinience because catkin is used as a build system throught the project.
+The library is independent of ROS (exept for a few calls of `ROS_INFO` when compiled in `DEBUG_MODE` to produce readable debug output).
+
+### ROS demo
+
+```
+roslaunch ros_crop_detection demo.launch
+```
+
+To adjust parameters, edit `deployment/ros_crop_detection/config/demo.yaml`.
+

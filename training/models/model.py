@@ -1,9 +1,9 @@
 """Common way to get one of our models.
 
+Parts adapted from code originally written for MGE-MSR-P-S.
+
 Usage:
     model = Model.by_name('hardnet56', phase='training')
-
-Note: Parts adapted from code originally written for MGE-MSR-P-S.
 """
 
 import torch

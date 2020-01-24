@@ -1,6 +1,6 @@
 """Set some filepaths for be used in other parts of the package.
 
-Author: Jan Quakernack
+Adapted from code originally written for MGE-MSR-P-S.
 
 Usage:
 
@@ -9,9 +9,6 @@ Usage:
     path_to_my_log_file = LOGS_DIR/'my_log.yaml'
     with path_to_my_log_file.open('w+') as log_file:
         # write stuff
-
-Note: This module contains parts, which were written for other student projects
-conducted by the author.
 """
 
 import os

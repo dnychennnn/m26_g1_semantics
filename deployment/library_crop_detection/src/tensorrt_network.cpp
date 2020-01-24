@@ -3,6 +3,9 @@
  *
  * Reference: https://github.com/PRBonn/bonnetal/blob/master/deploy/src/segmentation/lib/src/netTensorRT.cpp
  *
+ * Some parts of this implementation are strongly inspired by the original
+ * implementation of bonnetal, in particular the way buffer memory is allocated.
+ *
  * @version 0.1
  */
 

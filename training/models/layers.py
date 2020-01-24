@@ -1,8 +1,6 @@
 """Some standard network building blocks.
 
-Author: Jan Quakernack
-
-Note: Adapted from code originally written for MGE-MSR-P-S.
+Adapted from code originally written for MGE-MSR-P-S.
 """
 
 import torch

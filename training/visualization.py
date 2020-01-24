@@ -82,6 +82,8 @@ def tensor_to_false_color(tensor_rgb, tensor_nir, mean_rgb, std_rgb, mean_nir, s
 
 
 def make_plot_from_semantic_output(input_rgb, input_nir, semantic_output, semantic_target, apply_softmax, **normalization):
+    """Overlay image with a heatmap accoring to class confidences.
+    """
     image = tensor_to_false_color(input_rgb, input_nir, **normalization)
 
     # use grayscale as background
@@ -121,6 +123,9 @@ def make_plot_from_semantic_output(input_rgb, input_nir, semantic_output, semant
 
 
 def make_plot_from_semantic_labels(input_rgb, input_nir, semantic_labels, **normalization):
+    """Show sugar beets and weed in different colors.
+    """
+
     image = tensor_to_false_color(input_rgb, input_nir, **normalization)
 
     # use grayscale as background
@@ -149,9 +154,17 @@ def make_plot_from_semantic_labels(input_rgb, input_nir, semantic_labels, **norm
     return plot
 
 
-def make_plot_from_stem_keypoint_offset_output(input_rgb, input_nir, stem_keypoint_output, stem_offset_output, keypoint_radius, apply_sigmoid, apply_tanh, **normalization):
-    """
-    Note: Parts adapted from code originally written for MGE-MSR-P-S.
+def make_plot_from_stem_keypoint_offset_output(input_rgb,
+                                               input_nir,
+                                               stem_keypoint_output,
+                                               stem_offset_output,
+                                               keypoint_radius,
+                                               apply_sigmoid,
+                                               apply_tanh,
+                                               **normalization):
+    """Draw heatmap and offsets for stem detection.
+
+    Adapted from code originally written for MGE-MSR-P-S.
     """
     image = tensor_to_false_color(input_rgb, input_nir, **normalization)
 
@@ -199,10 +212,17 @@ def make_plot_from_stem_keypoint_offset_output(input_rgb, input_nir, stem_keypoi
     return plot
 
 
-def make_plot_from_stem_output(input_rgb, input_nir, stem_position_output, stem_position_target, keypoint_radius, target_width, target_height, **normalization):
-    """
-    Note: This function contains parts, which were written for other student projects
-    conducted by the author.
+def make_plot_from_stem_output(input_rgb,
+                               input_nir,
+                               stem_position_output,
+                               stem_position_target,
+                               keypoint_radius,
+                               target_width,
+                               target_height,
+                               **normalization):
+    """Draw marker at each predicted/actual stem position.
+
+    Adapted from code originally written for MGE-MSR-P-S.
     """
 
     image = tensor_to_false_color(input_rgb, input_nir, **normalization)

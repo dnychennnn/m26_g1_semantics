@@ -8,6 +8,8 @@ from time import process_time
 
 class StemExtraction(nn.Module):
     """Infere stem positions form predicted keypoints an offsets.
+
+    Adapted from code originally written for MGE-MSR-P-S.
     """
 
     def __init__(self, input_width, input_height, keypoint_radius, threshold_votes,
@@ -86,9 +88,6 @@ class StemExtraction(nn.Module):
 
 
     def cast_votes_pytorch(self, votes_xs, votes_ys, votes_weights):
-        """
-        Note: Adapted from code originally written for MGE-MSR-P-S.
-        """
         batch_size = votes_weights.shape[0]
         device = votes_weights.device
 

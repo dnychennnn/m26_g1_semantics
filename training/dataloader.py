@@ -1,6 +1,4 @@
 """Interface to datasets.
-
-Authors: Yung-Yu Chen, Jan Quakernack
 """
 
 import torch
@@ -21,10 +19,10 @@ MAX_STEM_COUNT = 128
 
 class SugarBeetDataset(Dataset):
     """
+    Parts adapted from code originally written for MGE-MSR-P-S.
+
     Usage:
         dataset = SugarBeetDataset.from_config('train') # or 'val', 'test'
-
-    Note: Parts adapted from code originally written for MGE-MSR-P-S.
     """
 
     @classmethod

@@ -25,8 +25,7 @@ class SemanticLoss(nn.Module):
 
 
 class StemClassificationLoss(nn.Module):
-    """Binary cross entropy loss to distinguish keypoint (stem) pixels
-    from background pixels.
+    """Binary cross entropy loss to distinguish keypoint (stem) pixels from background pixels.
     """
 
     def __init__(self, weight_background, weight_stem):
@@ -46,9 +45,10 @@ class StemClassificationLoss(nn.Module):
         return loss
 
 
-
 class StemRegressionLoss(nn.Module):
     """Loss for x and y offset of all keypoint pixels.
+
+    Adapted from code originally written for MGE-MSR-P-S.
     """
 
     def __init__(self):
@@ -60,10 +60,10 @@ class StemRegressionLoss(nn.Module):
 
     def forward(self, stem_offset_output_batch, stem_keypoint_target_batch,
                 stem_offset_target_batch):
+        device = stem_offset_output_batch.device
+
         # apply tanh to have offsets in range -1, 1
         # normalized_offset_output_batch = self.tanh(stem_offset_output_batch)
-
-        device = stem_offset_output_batch.device
 
         # no tanh, use plain logits
         normalized_offset_output_batch = stem_offset_output_batch
