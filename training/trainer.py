@@ -14,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from training.models.model import Model
 from training.dataloader import SugarBeetDataset
-from training.losses import StemClassificationLoss, StemRegressionLoss
+from training.losses import SemanticLoss, StemClassificationLoss, StemRegressionLoss
 from training import vis
 from training import LOGS_DIR, MODELS_DIR, CUDA_DEVICE_NAME, load_config
 from training.evalmetrics import (compute_confusion_matrix,
@@ -125,8 +125,8 @@ class Trainer:
         self.model = model.to(self.device)
 
         # init losses
-        self.semantic_loss_function = nn.CrossEntropyLoss(ignore_index=3,
-                weight=torch.Tensor([self.weight_background, self.weight_weed, self.weight_sugar_beet])).to(self.device)
+        self.semantic_loss_function = SemanticLoss(
+                self.weight_background, self.weight_weed, self.weight_sugar_beet, ignore_index=3).to(self.device)
         self.stem_classification_loss_function = StemClassificationLoss(weight_background=weight_stem_background, weight_stem=weight_stem).to(self.device)
         self.stem_regression_loss_function = StemRegressionLoss().to(self.device)
 
@@ -220,11 +220,13 @@ class Trainer:
 
                 # unpack batch
                 semantic_target_batch = target_batch['semantic']
+                semantic_loss_weights_batch = target_batch['semantic_loss_weights']
                 stem_keypoint_target_batch = target_batch['stem_keypoint']
                 stem_offset_target_batch = target_batch['stem_offset']
 
                 # bring to device
                 input_batch = input_batch.to(self.device)
+                semantic_loss_weights_batch = semantic_loss_weights_batch.to(self.device)
                 semantic_target_batch = semantic_target_batch.to(self.device)
                 stem_keypoint_target_batch = stem_keypoint_target_batch.to(self.device)
                 stem_offset_target_batch = stem_offset_target_batch.to(self.device)
@@ -241,6 +243,7 @@ class Trainer:
 
                 # backward pass
                 losses = self.compute_losses(semantic_output_batch=semantic_output_batch,
+                                             semantic_loss_weights_batch=semantic_loss_weights_batch,
                                              stem_keypoint_output_batch=stem_keypoint_output_batch,
                                              stem_offset_output_batch=stem_offset_output_batch,
                                              semantic_target_batch=semantic_target_batch,
@@ -277,6 +280,7 @@ class Trainer:
 
     def compute_losses(self,
                        semantic_output_batch,
+                       semantic_loss_weights_batch,
                        stem_keypoint_output_batch,
                        stem_offset_output_batch,
                        semantic_target_batch,
@@ -286,7 +290,8 @@ class Trainer:
         # compute losses
         semantic_loss = (self.semantic_loss_weight
                          *self.semantic_loss_function(semantic_output_batch,
-                                                      semantic_target_batch))
+                                                      semantic_target_batch,
+                                                      semantic_loss_weights_batch))
 
         stem_classification_loss = (self.stem_classification_loss_weight
                                     *self.stem_classification_loss_function(stem_keypoint_output_batch=stem_keypoint_output_batch,
@@ -320,7 +325,7 @@ class Trainer:
         plot_semantics = vis.make_plot_from_semantic_output(input_rgb=input_slice[:3],
                                                             input_nir=input_slice[3],
                                                             semantic_output=semantic_output,
-                                                            semantic_target=semantic_target,
+                                                            semantic_target=None, # semantic_target,
                                                             apply_softmax=True,
                                                             **self.dataset_train.normalization_rgb_dict,
                                                             **self.dataset_train.normalization_nir_dict)
@@ -374,8 +379,11 @@ class Trainer:
                                   losses=losses_train,
                                   filename=self.current_checkpoint_name+'_losses_training.yaml')
 
-        print("Evaluate on 'val' split.")
-        self.evaluate_on_checkpoint(test_run=test_run)
+        # print("Evaluate on 'val' split.")
+        try:
+            self.evaluate_on_checkpoint(test_run=test_run)
+        except:
+            pass
 
         self.current_checkpoint_index += 1
 
@@ -423,12 +431,15 @@ class Trainer:
 
             # unpack batch
             semantic_target_batch = target_batch['semantic']
+            semantic_loss_weights_batch = target_batch['semantic_loss_weights']
             stem_keypoint_target_batch = target_batch['stem_keypoint']
             stem_offset_target_batch = target_batch['stem_offset']
             stem_position_target_batch = target_batch['stem_position']
             stem_count_target_batch = target_batch['stem_count']
 
+            # bring to device
             input_batch = input_batch.to(self.device)
+            semantic_loss_weights_batch = semantic_loss_weights_batch.to(self.device)
             semantic_target_batch = semantic_target_batch.to(self.device)
             stem_keypoint_target_batch = stem_keypoint_target_batch.to(self.device)
             stem_offset_target_batch = stem_offset_target_batch.to(self.device)
@@ -447,6 +458,7 @@ class Trainer:
 
             # compute losses
             losses = self.compute_losses(semantic_output_batch=semantic_output_batch,
+                                         semantic_loss_weights_batch=semantic_loss_weights_batch,
                                          stem_keypoint_output_batch=stem_keypoint_output_batch,
                                          stem_offset_output_batch=stem_offset_output_batch,
                                          semantic_target_batch=semantic_target_batch,

@@ -45,7 +45,14 @@ class SugarBeetDataset(Dataset):
 
         # only use files of the given split as specified in config
         # we have 100 in 'val', 100 in 'test' and the rest in 'train'
+
         dataset_parameters['filenames_filter'] = load_config(split+'_split.yaml')
+
+        # hack for evaluation on test set
+        # if split=='val':
+            # dataset_parameters['filenames_filter'] = load_config('test_split.yaml')
+        # else:
+            # dataset_parameters['filenames_filter'] = load_config(split+'_split.yaml')
 
         # data augmentation for train split
         if split=='train':
@@ -280,6 +287,13 @@ class SugarBeetDataset(Dataset):
         # scale semantic target to target size
         semantic_target = cv2.resize(semantic_target, (self.target_width, self.target_height), cv2.INTER_NEAREST)
 
+        # loss weights according to object size
+        semantic_loss_weights = self._make_semantic_loss_weights_according_to_object_size(semantic_target)
+
+        # debug output
+        # cv2.imshow('semantic_loss_weights', semantic_loss_weights/10.0)
+        # cv2.waitKey()
+
         # scale position to target
         stem_position_target = [(x*self.target_scale_factor_x, y*self.target_scale_factor_y)
                                 for x, y in stem_position_target]
@@ -306,6 +320,7 @@ class SugarBeetDataset(Dataset):
 
         # convert targets to tensors
         semantic_target_tensor = torch.from_numpy(semantic_target.astype(np.int)) # shape (target_height, target_width,)
+        semantic_loss_weights_tensor = torch.from_numpy(semantic_loss_weights.astype(np.float32))
 
         stem_keypoint_target_tensor = torch.from_numpy(stem_keypoint_target.astype(np.float32)) # shape (1, target_height, target_width,)
         stem_offset_target_tensor = torch.from_numpy(stem_offset_target.astype(np.float32)) # shape (2, target_height, target_width,)
@@ -324,6 +339,7 @@ class SugarBeetDataset(Dataset):
         stem_position_target_tensor = torch.from_numpy(stem_position_target)
 
         target = {'semantic': semantic_target_tensor,
+                  'semantic_loss_weights': semantic_loss_weights_tensor,
                   'stem_keypoint': stem_keypoint_target_tensor,
                   'stem_offset': stem_offset_target_tensor,
                   'stem_position': stem_position_target_tensor,
@@ -341,6 +357,49 @@ class SugarBeetDataset(Dataset):
         semantic_target = np.where(semantic_label==self.label_ignore, 3, semantic_target)
 
         return semantic_target
+
+
+    def _make_semantic_loss_weights_according_to_object_size(self, semantic_target):
+        """A weight per pixel accoring to the size of the connected component.
+
+        Used to balance between small and large plants in our dataset.
+        """
+
+        weights = np.zeros_like(semantic_target, dtype=np.float32)
+
+        sugar_beet_mask = semantic_target==2
+        sugar_beet_weights = self._make_weights_map(sugar_beet_mask)
+        weights[sugar_beet_mask] = sugar_beet_weights[sugar_beet_mask]
+
+        weed_mask = semantic_target==1
+        weed_weights = self._make_weights_map(weed_mask)
+        weights[weed_mask] = weed_weights[weed_mask]
+
+        background_mask = semantic_target==0
+        weights[background_mask] = 1.0 # weight all background pixels equally
+
+        # ignored pixels have weight zero
+
+        return weights
+
+
+    def _make_weights_map(self, mask):
+        weights = np.zeros_like(mask, dtype=np.float32)
+
+        # dilate mask a bit
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+        dilated_mask = cv2.dilate(mask.astype(np.uint8), kernel)
+
+        num_components, labels = cv2.connectedComponents(dilated_mask)
+        mean_component_size = np.sum(mask)/num_components
+
+        for label in range(1, num_components):
+            component_mask = np.logical_and(labels==label, mask)
+            component_size = np.sum(component_mask).astype(np.float32)
+            weights[component_mask] = np.minimum(mean_component_size/component_size, 25.0)
+            # limit to 25 times the average weight
+
+        return weights
 
 
     def _pad_with_zeros(self, image):
