@@ -6,6 +6,7 @@ from pathlib import Path
 import torch
 from training.postprocessing.semantic_labeling import make_classification_map
 
+
 def compute_stem_metrics(stem_position_output, stem_position_target, tolerance_radius):
     """Compute metrics for evaluation of the stem detection.
 
@@ -166,3 +167,103 @@ def plot_confusion_matrix(path,
     ax.set_ylim(len(confusion_matrix)-0.5, -0.5)
     fig.savefig(str(confusion_matrix_path), bbox_inches='tight')
     plt.close('all')
+
+
+def precision_recall_curve_and_average_precision(semantic_outputs, semantic_targets, path, filename):
+    average_precisions = []
+
+    valid_pixels = semantic_targets!=3
+    for class_label, class_name in [(1, 'weed'), (2, 'sugar_beet')]:
+        valid_outputs = semantic_outputs[:, class_label][valid_pixels]
+        valid_targets = semantic_targets[valid_pixels]==class_label
+        average_precision = _single_class_precision_recall(valid_outputs, valid_targets, class_name, path, filename)
+        average_precisions.append(average_precision)
+
+    return average_precisions
+
+
+def _single_class_precision_recall(semantic_outputs, target_mask, class_name, path, filename, eps=1e-6):
+    num_confidence_thresholds = 101
+    confidence_thresholds = np.linspace(0.0, 1.0, num_confidence_thresholds)
+
+    precisions = np.zeros(num_confidence_thresholds, dtype=np.float)
+    recalls = np.zeros(num_confidence_thresholds, dtype=np.float)
+    ious = np.zeros(num_confidence_thresholds, dtype=np.float)
+
+    for index, confidence_threshold in enumerate(confidence_thresholds):
+        predicted_mask = semantic_outputs>=confidence_threshold
+
+        true_positives_mask = np.logical_and(target_mask, predicted_mask)
+        false_positives_mask = np.logical_and(np.logical_not(target_mask), predicted_mask)
+        false_negatives_mask = np.logical_and(target_mask, np.logical_not(predicted_mask))
+
+        true_positives = np.sum(true_positives_mask)
+        false_positives = np.sum(false_positives_mask)
+        false_negatives = np.sum(false_negatives_mask)
+
+        precisions[index] = true_positives/(true_positives+false_positives+eps)
+        recalls[index] = true_positives/(true_positives+false_negatives+eps)
+        ious[index] = true_positives/(true_positives+false_negatives+false_positives+eps)
+
+    num_recall_thresholds = 101
+    recall_thresholds = np.linspace(0.0, 1.0, num_recall_thresholds)
+
+    sum_precision = 0.0
+    for recall_threshold in recall_thresholds:
+        above_or_equal_threshold = recalls>=recall_threshold
+
+        if not np.any(above_or_equal_threshold):
+            # precision is zero
+            continue
+
+        # maximum precision with a recall equal or above threshold does contribute to average precision
+        sum_precision += np.max(precisions[above_or_equal_threshold])
+
+    average_precision = sum_precision/num_recall_thresholds
+
+    f1_scores = 2.0*precisions*recalls/(precisions+recalls+eps)
+    index_max_f1 = np.argmax(f1_scores)
+    index_max_iou = np.argmax(ious)
+
+    print('average precision ({}): {:.4f}'.format(class_name, average_precision))
+    print('confidence threshold for maximum F1 {:.4f} ({}): {:.2f}'.format(f1_scores[index_max_f1], class_name, confidence_thresholds[index_max_f1]))
+    print('confidence threshold for maximum IoU {:.4f} ({}): {:.2f}'.format(ious[index_max_iou], class_name, confidence_thresholds[index_max_iou]))
+
+    # plotting
+    indices = np.argsort(recalls)
+    recalls = recalls[indices]
+    confidence_thresholds = confidence_thresholds[indices]
+    precisions = precisions[indices]
+
+    # set all obtained precisions to max precision for given recall threshold
+    for index in range(num_confidence_thresholds):
+        precisions[index] = np.max(precisions[index:])
+
+    plt.ylim(0.0, 1.1)
+    plt.ylabel('precision')
+    plt.xlim(0.0, 1.0)
+    plt.xlabel('recall')
+    plt.grid(True, color=(0.5, 0.5, 0.5))
+
+    # plot as bars with certain width
+    # shifted_recalls = np.zeros_like(recalls)
+    # shifted_recalls[0] = recalls[0]
+    # shifted_recalls[1:] = recalls[:-1]
+    # widths = shifted_recalls-recalls
+    # plt.bar(recalls, precisions, align='edge', width=widths, color=(0.7, 0.7, 0.7), linewidth=2)
+
+    # plot as single points
+    plt.scatter(recalls, precisions, s=5, c=np.array([0.2, 0.2, 0.8]).reshape(1, -1))
+
+    # put confidence threshold as text
+    for index in range(0, num_confidence_thresholds, 10):
+        text = '{:.02f}'.format(confidence_thresholds[index])
+        plt.annotate(text, (recalls[index], precisions[index]))
+
+    path = path/("precision_recall/{}_{}.png".format(filename, class_name))
+    path.parent.mkdir(exist_ok=True, parents=True)
+    plt.savefig(str(path), bbox_inches='tight')
+    plt.close('all')
+
+    return average_precision.item()
+

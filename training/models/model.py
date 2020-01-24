@@ -125,6 +125,8 @@ class Model(nn.Module):
                  **extra_arguments):
         super().__init__()
 
+        self.deploy = False
+
         self.initial_conv_block = ConvBlock(input_channels=input_channels,
                                             output_channels=initial_conv_output_channels,
                                             kernel_size=initial_conv_kernel_size,
@@ -233,8 +235,8 @@ class Model(nn.Module):
         # debug output
         # print(semantic_output.shape)
 
-        if not self.training:
-          # we are in evaluation mode
+        if self.deploy:
+          # we are in deployment mode
           # apply softmax to logits of semantic output
           semantic_output = self.softmax_semantic(semantic_output)
 
@@ -243,8 +245,8 @@ class Model(nn.Module):
         # debug output
         # print(stem_keypoint_output.shape)
 
-        if not self.training:
-          # we are in evaluation mode
+        if self.deploy:
+          # we are in deployment mode
           # apply sigmoid to logits of stem keypoint output
           stem_keypoint_output = self.sigmoid_stem_keypoint(stem_keypoint_output)
 
@@ -254,6 +256,12 @@ class Model(nn.Module):
         # print(stem_offset_output.shape)
 
         return semantic_output, stem_keypoint_output, stem_offset_output
+
+
+    def deploy(self):
+        """Set a flag, so softmax and sigmoid activation are applied after the final layer.
+        """
+        self.deploy = True
 
 
 class Decoder(nn.Module):
