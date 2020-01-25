@@ -275,7 +275,8 @@ def compute_average_precision_stems(stem_positions_output, stem_positions_target
     confidence_thresholds = np.linspace(0.0, 1.0, num_confidence_thresholds)
 
     actual_within_tolerance = []
-    predicted_within_tolerance = [] # maximum confidence along all predicted stems within tolerance
+    predicted_within_tolerance = []
+    predicted_max_confidence_within_tolerance = [] # maximum confidence along all predicted stems within tolerance
 
     for index in range(num_images):
         positions_output = stem_positions_output[index][:, :2][:, None, :]
@@ -286,15 +287,16 @@ def compute_average_precision_stems(stem_positions_output, stem_positions_target
 
         within_tolerance = distances<tolerance_radius
         actual_within_tolerance.append(np.any(within_tolerance, axis=1))
+        predicted_within_tolerance.append(np.any(within_tolerance, axis=0))
 
         num_targets = positions_target.shape[1]
-
         if num_targets>0:
             confidences_output = np.stack([stem_positions_output[index][:, 2]]*num_targets, axis=-1)
-            predicted_within_tolerance.append(np.amax(confidences_output*within_tolerance, axis=0))
+            predicted_max_confidence_within_tolerance.append(np.amax(confidences_output*within_tolerance, axis=0))
 
     actual_within_tolerance = np.concatenate(actual_within_tolerance)
     predicted_within_tolerance = np.concatenate(predicted_within_tolerance)
+    predicted_max_confidence_within_tolerance = np.concatenate(predicted_max_confidence_within_tolerance)
 
     confidences = np.concatenate([output[:, 2] for output in stem_positions_output])
 
@@ -306,7 +308,8 @@ def compute_average_precision_stems(stem_positions_output, stem_positions_target
 
         true_positives = np.sum(np.logical_and(greater_threshold, actual_within_tolerance))
         false_positives = np.sum(np.logical_and(greater_threshold, ~actual_within_tolerance))
-        false_negatives = np.sum(predicted_within_tolerance<confidence_threshold)
+        false_negatives = np.sum(np.logical_or(~predicted_within_tolerance,
+                                               predicted_max_confidence_within_tolerance<confidence_threshold))
 
         precisions[index] = true_positives/(true_positives+false_positives+eps)
         recalls[index] = true_positives/(true_positives+false_negatives+eps)

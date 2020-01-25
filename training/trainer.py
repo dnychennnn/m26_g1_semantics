@@ -81,6 +81,7 @@ class Trainer:
                  sugar_beet_threshold,
                  weed_threshold,
                  tolerance_radius,
+                 size_depedent_weight,
                  **extra_arguments):
 
         self.architecture_name = architecture_name
@@ -99,6 +100,7 @@ class Trainer:
         self.sugar_beet_threshold = sugar_beet_threshold
         self.weed_threshold = weed_threshold
         self.stem_inference_threshold_peaks = stem_inference_threshold_peaks
+        self.size_depedent_weight = size_depedent_weight
 
         # init loss weights
         loss_norm = semantic_loss_weight+stem_loss_weight
@@ -220,16 +222,20 @@ class Trainer:
 
                 # unpack batch
                 semantic_target_batch = target_batch['semantic']
-                semantic_loss_weights_batch = target_batch['semantic_loss_weights']
                 stem_keypoint_target_batch = target_batch['stem_keypoint']
                 stem_offset_target_batch = target_batch['stem_offset']
 
+                if self.size_depedent_weight:
+                    semantic_loss_weights_batch = target_batch['semantic_loss_weights']
+
                 # bring to device
                 input_batch = input_batch.to(self.device)
-                semantic_loss_weights_batch = semantic_loss_weights_batch.to(self.device)
                 semantic_target_batch = semantic_target_batch.to(self.device)
                 stem_keypoint_target_batch = stem_keypoint_target_batch.to(self.device)
                 stem_offset_target_batch = stem_offset_target_batch.to(self.device)
+
+                if self.size_depedent_weight:
+                    semantic_loss_weights_batch = semantic_loss_weights_batch.to(self.device)
 
                 # debug output
                 # input_image = visualization.tensor_to_false_color(input_batch[0, :3], input_batch[0, 3],
@@ -243,7 +249,7 @@ class Trainer:
 
                 # backward pass
                 losses = self.compute_losses(semantic_output_batch=semantic_output_batch,
-                                             semantic_loss_weights_batch=semantic_loss_weights_batch,
+                                             semantic_loss_weights_batch=semantic_loss_weights_batch if self.size_depedent_weight else None,
                                              stem_keypoint_output_batch=stem_keypoint_output_batch,
                                              stem_offset_output_batch=stem_offset_output_batch,
                                              semantic_target_batch=semantic_target_batch,
@@ -444,18 +450,22 @@ class Trainer:
 
             # unpack batch
             semantic_target_batch = target_batch['semantic']
-            semantic_loss_weights_batch = target_batch['semantic_loss_weights']
             stem_keypoint_target_batch = target_batch['stem_keypoint']
             stem_offset_target_batch = target_batch['stem_offset']
             stem_position_target_batch = target_batch['stem_position']
             stem_count_target_batch = target_batch['stem_count']
 
+            if self.size_depedent_weight:
+                semantic_loss_weights_batch = target_batch['semantic_loss_weights']
+
             # bring to device
             input_batch = input_batch.to(self.device)
-            semantic_loss_weights_batch = semantic_loss_weights_batch.to(self.device)
             semantic_target_batch = semantic_target_batch.to(self.device)
             stem_keypoint_target_batch = stem_keypoint_target_batch.to(self.device)
             stem_offset_target_batch = stem_offset_target_batch.to(self.device)
+
+            if self.size_depedent_weight:
+                semantic_loss_weights_batch = semantic_loss_weights_batch.to(self.device)
 
             stem_position_target_list = self.stem_positions_to_list(stem_position_target_batch,
                                                                     stem_count_target_batch)
@@ -471,7 +481,7 @@ class Trainer:
 
             # compute losses
             losses = self.compute_losses(semantic_output_batch=semantic_output_batch,
-                                         semantic_loss_weights_batch=semantic_loss_weights_batch,
+                                         semantic_loss_weights_batch=semantic_loss_weights_batch if self.size_depedent_weight else None,
                                          stem_keypoint_output_batch=stem_keypoint_output_batch,
                                          stem_offset_output_batch=stem_offset_output_batch,
                                          semantic_target_batch=semantic_target_batch,
