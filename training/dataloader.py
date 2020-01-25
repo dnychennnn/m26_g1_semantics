@@ -88,6 +88,7 @@ class SugarBeetDataset(Dataset):
                  random_transformations,
                  seed,
                  filenames_filter,
+                 size_depedent_weight,
                  **extra_arguments):
         """Constructor.
 
@@ -120,6 +121,8 @@ class SugarBeetDataset(Dataset):
         self.suffix_yaml_annotations = suffix_yaml_annotations
 
         self.random_transformations = random_transformations
+
+        self.size_depedent_weight = size_depedent_weight
 
         if self.random_transformations is not None:
             self.random = np.random.RandomState(seed)
@@ -285,8 +288,9 @@ class SugarBeetDataset(Dataset):
         # scale semantic target to target size
         semantic_target = cv2.resize(semantic_target, (self.target_width, self.target_height), cv2.INTER_NEAREST)
 
-        # loss weights according to object size
-        semantic_loss_weights = self._make_semantic_loss_weights_according_to_object_size(semantic_target)
+        if self.size_depedent_weight:
+            # loss weights according to object size
+            semantic_loss_weights = self._make_semantic_loss_weights_according_to_object_size(semantic_target)
 
         # debug output
         # cv2.imshow('semantic_loss_weights', semantic_loss_weights/10.0)
@@ -318,7 +322,9 @@ class SugarBeetDataset(Dataset):
 
         # convert targets to tensors
         semantic_target_tensor = torch.from_numpy(semantic_target.astype(np.int)) # shape (target_height, target_width,)
-        semantic_loss_weights_tensor = torch.from_numpy(semantic_loss_weights.astype(np.float32))
+
+        if self.size_depedent_weight:
+            semantic_loss_weights_tensor = torch.from_numpy(semantic_loss_weights.astype(np.float32))
 
         stem_keypoint_target_tensor = torch.from_numpy(stem_keypoint_target.astype(np.float32)) # shape (1, target_height, target_width,)
         stem_offset_target_tensor = torch.from_numpy(stem_offset_target.astype(np.float32)) # shape (2, target_height, target_width,)
@@ -337,11 +343,13 @@ class SugarBeetDataset(Dataset):
         stem_position_target_tensor = torch.from_numpy(stem_position_target)
 
         target = {'semantic': semantic_target_tensor,
-                  'semantic_loss_weights': semantic_loss_weights_tensor,
                   'stem_keypoint': stem_keypoint_target_tensor,
                   'stem_offset': stem_offset_target_tensor,
                   'stem_position': stem_position_target_tensor,
                   'stem_count': stem_count_target_tensor}
+
+        if self.size_depedent_weight:
+            target['semantic_loss_weights'] = semantic_loss_weights_tensor,
 
         return input_tensor, target
 
@@ -394,8 +402,8 @@ class SugarBeetDataset(Dataset):
         for label in range(1, num_components):
             component_mask = np.logical_and(labels==label, mask)
             component_size = np.sum(component_mask).astype(np.float32)
-            weights[component_mask] = np.minimum(mean_component_size/component_size, 25.0)
-            # limit to 25 times the average weight
+            weights[component_mask] = np.minimum(mean_component_size/component_size, 10.0)
+            # limit to 10 times the average weight
 
         return weights
 

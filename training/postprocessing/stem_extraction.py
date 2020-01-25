@@ -79,10 +79,14 @@ class StemExtraction(nn.Module):
         peaks = torch.isclose(votes, votes_dilated)&(votes>self.threshold_peaks)
         peaks = peaks[:, 0]
 
-        positions_batch = [peaks[batch_index].nonzero() for batch_index in range(batch_size)]
+        positions_batch = []
 
-        # use (x, y) convention
-        positions_batch = [torch.stack([positions[:, 1], positions[:, 0]], dim=-1) for positions in positions_batch]
+        for slice_index in range(batch_size):
+            positions = peaks[slice_index].nonzero()
+            scores = votes[slice_index, 0][peaks[slice_index]]
+            # put as (x, y, score)
+            positions = torch.stack([positions[:, 1].float(), positions[:, 0].float(), scores], dim=-1)
+            positions_batch.append(positions)
 
         return positions_batch
 

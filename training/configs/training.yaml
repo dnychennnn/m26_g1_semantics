@@ -18,11 +18,15 @@ weight_sugar_beet: 5.0
 weight_stem_background: 1.0
 weight_stem: 10.0
 
+# weight semantic loss depending on object size
+# used to balance between small and large plants
+size_depedent_weight: False
+
 sugar_beet_threshold: 0.44 # confidence threshold to be assigned to this class
 weed_threshold: 0.99 # sugar beets treated with priority for thresholds <= 0.5
 
 stem_inference_threshold_votes: 0.001 # pixel with a keypoint confidence below this value do not cast votes at all
-stem_inference_threshold_peaks: 0.5 # only pixels with accumulated votes larger than this value are considered as stems
+stem_inference_threshold_peaks: 0.1 # only pixels with accumulated votes larger than this value are considered as stems
 stem_inference_kernel_size_votes: 3 # pixels also vote for neighbors within this window, should be odd
 stem_inference_kernel_size_peaks: 5 # non-maximum suppression for all peaks in this window, should be odd
 

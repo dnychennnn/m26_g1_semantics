@@ -8,18 +8,27 @@ import cv2
 
 
 class SemanticLoss(nn.Module):
-    """Cross entropy loss with a weight per pixel to account of objects of different sizes.
+    """Cross entropy loss.
+
+    Optional with a weight per pixel to account of objects of different sizes.
     """
     def __init__(self, weight_background, weight_weed, weight_sugar_beet, ignore_index):
         super().__init__()
         self.class_weights = torch.tensor([weight_background, weight_weed, weight_sugar_beet],
                                            dtype=torch.float32, requires_grad=False)
-        self.criterion = torch.nn.CrossEntropyLoss(ignore_index=ignore_index, weight=self.class_weights, reduction='none')
+
+        self.criterion = torch.nn.CrossEntropyLoss(
+            ignore_index=ignore_index, weight=self.class_weights, reduction='none')
 
 
     def forward(self, semantic_output_batch, semnatic_target_batch, semantic_loss_weight_batch):
         loss_batch = self.criterion(semantic_output_batch, semnatic_target_batch)
-        loss_batch = torch.mean(semantic_loss_weight_batch*loss_batch)
+
+        if semantic_loss_weight_batch is not None:
+            # weighted mean depending on object size
+            loss_batch = torch.mean(semantic_loss_weight_batch*loss_batch)
+        else:
+            loss_batch = torch.mean(loss_batch)
 
         return loss_batch
 
