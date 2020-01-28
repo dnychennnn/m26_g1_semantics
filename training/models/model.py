@@ -258,10 +258,10 @@ class Model(nn.Module):
         return semantic_output, stem_keypoint_output, stem_offset_output
 
 
-    def deploy(self):
+    def set_deploy(self, deploy):
         """Set a flag, so softmax and sigmoid activation are applied after the final layer.
         """
-        self.deploy = True
+        self.deploy = deploy
 
 
 class Decoder(nn.Module):

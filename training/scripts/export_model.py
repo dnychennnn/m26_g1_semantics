@@ -43,7 +43,7 @@ def export_model(architecture_name, path_to_output_file, device, file_type):
 
     model = model.to(device)
     model.eval()
-    model.deploy() # set flag to add sigmoid, softmax after final layers
+    model.set_deploy(True) # set flag to add sigmoid, softmax after final layers
 
     dummy_input = torch.randn(batch_size, input_channels, input_height, input_width, device=device)
     model(dummy_input)
