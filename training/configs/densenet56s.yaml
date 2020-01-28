@@ -1,6 +1,5 @@
 architecture_name: 'densenet56s'
-#path_to_weights_file: 'densenet56s.pth'
-path_to_weights_file: ''
+path_to_weights_file: 'densenet56s_cp_43.pth'
 
 batch_size: 1
 input_channels: 4
@@ -29,3 +28,8 @@ growth_rate_per_stage: [16, 16, 32, 128]
 do_downsampling_per_stage: [True, True, True, False]
 provide_as_output_per_stage: [True, True, True, True]
 dropout_rate: 0.2
+
+sugar_beet_threshold: 0.74
+weed_threshold: 0.89
+
+stem_score_threshold: 0.77

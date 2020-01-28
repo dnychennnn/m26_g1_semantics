@@ -82,6 +82,7 @@ class Trainer:
                  weed_threshold,
                  tolerance_radius,
                  size_depedent_weight,
+                 stem_score_threshold,
                  **extra_arguments):
 
         self.architecture_name = architecture_name
@@ -101,6 +102,7 @@ class Trainer:
         self.weed_threshold = weed_threshold
         self.stem_inference_threshold_peaks = stem_inference_threshold_peaks
         self.size_depedent_weight = size_depedent_weight
+        self.stem_score_threshold = stem_score_threshold
 
         # init loss weights
         loss_norm = semantic_loss_weight+stem_loss_weight
@@ -448,6 +450,9 @@ class Trainer:
         for batch_index, (input_batch, target_batch) in enumerate(self.data_loader_val):
             self.model.eval()
 
+            # if batch_index>=max_num_batches:
+                # break;
+
             # unpack batch
             semantic_target_batch = target_batch['semantic']
             stem_keypoint_target_batch = target_batch['stem_keypoint']
@@ -521,7 +526,7 @@ class Trainer:
 
             # comute stem metrics
             confusion_matrix_stem_val, deviation_val = compute_stem_metrics(stem_position_output_batch,
-                    stem_position_target_list, tolerance_radius=self.tolerance_radius)
+                    stem_position_target_list, tolerance_radius=self.tolerance_radius, stem_score_threshold=self.stem_score_threshold)
 
             accumulated_confusion_matrix_stem_val += confusion_matrix_stem_val
             accumulated_deviation_val += deviation_val
@@ -613,6 +618,15 @@ class Trainer:
             self.tolerance_radius, metrics_stem_val['recall'][0]))
         print("  Mean deviation stems within {:.01f} px tolerance: {:.04f} px".format(
             self.tolerance_radius, accumulated_deviation_val/(accumulated_confusion_matrix_stem_val[0, 0]+1e-6)))
+
+        # print to what extent we confused beet and weed
+        actual_weed_total = np.sum(accumulated_confusion_matrix_val[1, :])
+        actual_beet_total = np.sum(accumulated_confusion_matrix_val[2, :])
+        predicted_weed_but_actual_beet = accumulated_confusion_matrix_val[2, 1]
+        predicted_beet_but_actual_weed = accumulated_confusion_matrix_val[1, 2]
+
+        print("Actual beet pixels predicted as weed: {:.02f}%".format(100.0*predicted_weed_but_actual_beet/actual_beet_total))
+        print("Actual weed pixels predicted as beet: {:.02f}%".format(100.0*predicted_beet_but_actual_weed/actual_weed_total))
 
 
     def stem_positions_to_list(self, stem_position_target_batch, stem_count_target_batch):

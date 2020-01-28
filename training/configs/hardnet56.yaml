@@ -1,6 +1,6 @@
 architecture_name: 'hardnet56'
-#path_to_weights_file: 'hardnet56.pth'
-path_to_weights_file: ''
+path_to_weights_file: 'hardnet56_cp_10.pth'
+#path_to_weights_file: ''
 
 batch_size: 2
 input_channels: 4
@@ -30,3 +30,8 @@ do_downsampling_per_stage: [True, True, True, False]
 provide_as_output_per_stage: [True, True, True, True]
 channels_weighting_factor: 1.6
 dropout_rate: 0.2
+
+sugar_beet_threshold: 0.68
+weed_threshold: 0.88
+
+stem_score_threshold: 0.51

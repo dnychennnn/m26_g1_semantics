@@ -7,7 +7,7 @@ import torch
 from training.postprocessing.semantic_labeling import make_classification_map
 
 
-def compute_stem_metrics(stem_position_output, stem_position_target, tolerance_radius):
+def compute_stem_metrics(stem_position_output, stem_position_target, tolerance_radius, stem_score_threshold):
     """Compute metrics for evaluation of the stem detection.
 
     Count a true positive for each predicted stem if an actual stem is within tolerance_radius.
@@ -26,13 +26,16 @@ def compute_stem_metrics(stem_position_output, stem_position_target, tolerance_r
 
     # compute metrics for each batch
     for index_in_batch in range(batch_size):
-        # get count of predicted and actual stems
-        output_count = stem_position_output[index_in_batch].shape[0]
-        target_count = stem_position_target[index_in_batch].shape[0]
-
         # bring stem position to numpy
-        stem_output_coords = stem_position_output[index_in_batch][:, :2].cpu().detach().numpy() # without scores
+        stem_output_coords = stem_position_output[index_in_batch].cpu().detach().numpy()
         stem_target_coords = stem_position_target[index_in_batch].cpu().detach().numpy()
+
+        # only use predicted stems with a sufficient score
+        stem_output_coords = stem_output_coords[stem_output_coords[:, 2]>stem_score_threshold][:, :2] # now without scores
+
+        # get count of predicted and actual stems
+        output_count = stem_output_coords.shape[0]
+        target_count = stem_target_coords.shape[0]
 
         if output_count>0 and target_count>0:
             # using numpy broadcasting
@@ -290,9 +293,12 @@ def compute_average_precision_stems(stem_positions_output, stem_positions_target
         predicted_within_tolerance.append(np.any(within_tolerance, axis=0))
 
         num_targets = positions_target.shape[1]
-        if num_targets>0:
+        num_predictions = positions_output.shape[0]
+        if num_targets>0 and num_predictions>0:
             confidences_output = np.stack([stem_positions_output[index][:, 2]]*num_targets, axis=-1)
             predicted_max_confidence_within_tolerance.append(np.amax(confidences_output*within_tolerance, axis=0))
+        elif num_targets>0:
+            predicted_max_confidence_within_tolerance.append(np.zeros(num_targets))
 
     actual_within_tolerance = np.concatenate(actual_within_tolerance)
     predicted_within_tolerance = np.concatenate(predicted_within_tolerance)

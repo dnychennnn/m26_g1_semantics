@@ -1,7 +1,7 @@
-architecture_name: 'densenet56'
-path_to_weights_file: 'densenet56_cp_22.pth'
+architecture_name: 'hardnet56s'
+path_to_weights_file: 'hardnet56s_cp_5.pth'
 
-batch_size: 1
+batch_size: 2
 input_channels: 4
 input_height: 966
 input_width: 1296
@@ -15,7 +15,7 @@ initial_conv_kernel_size: 7
 
 # 'shared': same decoder for semantic and stem features
 # 'separate': two different decoders
-decoder_option: 'separate'
+decoder_option: 'shared'
 
 # only allowed to be different if decoder_option is 'separate'
 semantic_feature_channels: 64
@@ -27,9 +27,10 @@ output_channels_per_stage: [64, 128, 256, 512]
 growth_rate_per_stage: [16, 16, 32, 128]
 do_downsampling_per_stage: [True, True, True, False]
 provide_as_output_per_stage: [True, True, True, True]
+channels_weighting_factor: 1.6
 dropout_rate: 0.2
 
-sugar_beet_threshold: 0.73
-weed_threshold: 0.95
+sugar_beet_threshold: 0.88
+weed_threshold: 0.86
 
-stem_score_threshold: 0.75
+stem_score_threshold: 0.73
