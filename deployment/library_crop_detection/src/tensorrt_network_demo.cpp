@@ -10,6 +10,7 @@
 #include "library_crop_detection/network_output_visualizer.hpp"
 
 int main() {
+
   // get some test image
   cv::Mat input_rgb = cv::imread("test_data/test_rgb.png", cv::IMREAD_UNCHANGED);
   //cv::imshow("input_rgb", input_rgb);

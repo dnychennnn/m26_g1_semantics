@@ -18,6 +18,7 @@ SemanticLabeler::SemanticLabeler(const SemanticLabelerParameters& kParameters):
     kThresholdSugarBeet_{kParameters.threshold_sugar_beet},
     kThresholdWeed_{kParameters.threshold_weed} {}
 
+
 void SemanticLabeler::Infer(NetworkOutput& result) const {
   #ifdef DEBUG_MODE
   // measure labeling time in debug mode

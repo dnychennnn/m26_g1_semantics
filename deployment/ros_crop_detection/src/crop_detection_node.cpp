@@ -21,6 +21,8 @@
 
 #include "ros_crop_detection/crop_detection.hpp"
 
+#include "library_crop_detection/tensorrt_network.hpp"
+
 int main(int argc, char** argv) {
   ros::init(argc, argv, "crop_detection_node");
   ros::NodeHandle node_handle("~");

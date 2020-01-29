@@ -28,6 +28,8 @@
 
 namespace igg {
 
+namespace fs = boost::filesystem;
+
 PytorchNetwork::PytorchNetwork(
     const NetworkParameters& kNetworkParameters,
     const SemanticLabelerParameters& kSemanticLabelerParameters,
@@ -61,9 +63,6 @@ void PytorchNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
   #ifdef DEBUG_MODE
   // measure inference time in debug mode
   StopWatch stop_watch;
-  #endif // DEBUG_MODE
-
-  #ifdef DEBUG_MODE
   stop_watch.Start();
   #endif // DEBUG_MODE
 
@@ -74,15 +73,6 @@ void PytorchNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
   // return resized image as well
   std::memcpy(result.ServeInputImageBuffer(this->kInputWidth_, this->kInputHeight_),
       input.ptr(), 4*this->kInputWidth_*this->kInputHeight_);
-
-  #ifdef DEBUG_MODE
-  double scale_time = stop_watch.ElapsedTime();
-  ROS_INFO("Scale network input: %f ms (%f fps)", 1000.0*scale_time, 1.0/scale_time);
-  #endif // DEBUG_MODE
-
-  #ifdef DEBUG_MODE
-  stop_watch.Start();
-  #endif // DEBUG_MODE
 
   // to float
   input.convertTo(input, CV_32F);
@@ -97,15 +87,6 @@ void PytorchNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
       }
     }
   );
-
-  #ifdef DEBUG_MODE
-  double normalization_time = stop_watch.ElapsedTime();
-  ROS_INFO("Normalize network input: %f ms (%f fps)", 1000.0*normalization_time, 1.0/normalization_time);
-  #endif // DEBUG_MODE
-
-  #ifdef DEBUG_MODE
-  stop_watch.Start();
-  #endif // DEBUG_MODE
 
   torch::Tensor input_tensor = torch::from_blob(this->input_buffer_, {
       1, this->kInputChannels_, this->kInputHeight_, this->kInputWidth_}).to(torch::kFloat32);
@@ -146,14 +127,31 @@ void PytorchNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
               keypoint_offset_output_tensor.slice(1, 1, 2).data_ptr<float>(),
               4*kOffsetOutputWidth*kOffsetOutputHeight);
 
-  #ifdef DEBUG_MODE
-  double inference_time = stop_watch.ElapsedTime();
-  ROS_INFO("Network inference time (including data copying): %f ms (%f fps)", 1000.0*inference_time, 1.0/inference_time);
-  #endif // DEBUG_MODE
-
   // postprocessing
   this->kSemanticLabeler_.Infer(result);
   this->kStemExtractor_.Infer(result);
+
+  #ifdef DEBUG_MODE
+  double inference_time = stop_watch.ElapsedTime();
+  ROS_INFO("Network inference time (including data transfer): %f ms (%f fps)", 1000.0*inference_time, 1.0/inference_time);
+
+  // also write inference times to file
+  std::string log_file_name = "/tmp/"+fs::path(this->filepath_).stem().string()
+                              +"_pytorch_network_inference_times.txt";
+  std::ifstream log_file_in;
+  std::ofstream log_file;
+  log_file_in.open(log_file_name);
+  if (!log_file_in.good()) {
+    // does not exists yet, write header
+    log_file.open(log_file_name);
+    log_file << "#   inference time [ms]   fps [s^-1]   (Torch)\n";
+    log_file.close();
+  }
+
+  log_file.open(log_file_name, std::ofstream::app);
+  log_file << 1000.0*inference_time << "   " << 1.0/inference_time << "\n";
+  log_file.close();
+  #endif // DEBUG_MODE
 
   #endif // TORCH_AVAILABLE
 }
@@ -164,6 +162,11 @@ bool PytorchNetwork::IsReadyToInfer() const {
 }
 
 void PytorchNetwork::Load(const std::string& kFilepath, const bool kForceRebuild){
+  #ifdef DEBUG_MODE
+  // remember filepath for debug purposes
+  this->filepath_ = kFilepath;
+  #endif // DEBUG_MODE
+
   #ifdef TORCH_AVAILABLE
   try {
     std::cout << "Load model from: " << kFilepath << "\n";

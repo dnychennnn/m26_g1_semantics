@@ -62,6 +62,11 @@ private:
   const int kInputHeight_;
   const int kInputChannels_;
 
+  #ifdef DEBUG_MODE
+  // for debugging purposes
+  std::string filepath_;
+  #endif // DEBUG_MODE
+
   #ifdef TORCH_AVAILABLE
   torch::jit::script::Module module_;
   #endif // TORCH_AVAILABLE

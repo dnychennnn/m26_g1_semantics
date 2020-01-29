@@ -26,6 +26,7 @@
 
 #ifdef DEBUG_MODE
 #include <ros/console.h>
+#include <fstream>
 #include "library_crop_detection/stop_watch.hpp"
 #endif // DEBUG_MODE
 
@@ -37,7 +38,6 @@
 namespace igg {
 
 namespace fs = boost::filesystem;
-
 
 TensorrtNetwork::TensorrtNetwork(
     const NetworkParameters& kNetworkParameters,
@@ -55,8 +55,7 @@ TensorrtNetwork::~TensorrtNetwork() {
   ASSERT_TENSORRT_AVAILABLE;
   #ifdef TENSORRT_AVAILABLE
   this->FreeBufferMemory();
-  if(this->context_){this->context_->destroy(); this->context_ = nullptr;}
-  if(this->engine_){this->engine_->destroy(); this->engine_ = nullptr;}
+  //if(this->engine_exists_){this->engine_->destroy(); this->engine_exists_ = false;}
   #endif // TENSORRT_AVAILABLE
 }
 
@@ -65,26 +64,20 @@ void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
   ASSERT_TENSORRT_AVAILABLE;
   #ifdef TENSORRT_AVAILABLE
 
-  #ifdef DEBUG_MODE
-  // measure inference time in debug mode
-  StopWatch stop_watch;
-  #endif // DEBUG_MODE
-
-  if (!this->engine_) {
+  if (!this->engine_exists_) {
     throw std::runtime_error("No engine loaded.");
   }
 
-  if (!this->context_) {
-    this->context_ = this->engine_->createExecutionContext();
-  }
-
-  if (!this->context_) {
-    throw std::runtime_error("Could not create execution context.");
-  }
-
   #ifdef DEBUG_MODE
+  // measure inference time in debug mode
+  StopWatch stop_watch;
   stop_watch.Start();
   #endif // DEBUG_MODE
+
+  auto context = this->engine_->createExecutionContext(); // allows to run one engine in several contexts
+  if (!context) {
+    throw std::runtime_error("Could not create execution context.");
+  }
 
   // resize input image to network input size
   cv::Mat input;
@@ -93,15 +86,6 @@ void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
   // return resized image as well
   std::memcpy(result.ServeInputImageBuffer(this->input_width_, this->input_height_),
       input.ptr(), 4*this->input_width_*this->input_height_);
-
-  #ifdef DEBUG_MODE
-  double scale_time = stop_watch.ElapsedTime();
-  ROS_INFO("Scale network input: %f ms (%f fps)", 1000.0*scale_time, 1.0/scale_time);
-  #endif // DEBUG_MODE
-
-  #ifdef DEBUG_MODE
-  stop_watch.Start();
-  #endif // DEBUG_MODE
 
   // to float
   input.convertTo(input, CV_32F);
@@ -117,15 +101,6 @@ void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
     }
   );
 
-  #ifdef DEBUG_MODE
-  double normalization_time = stop_watch.ElapsedTime();
-  ROS_INFO("Normalize network input: %f ms (%f fps)", 1000.0*normalization_time, 1.0/normalization_time);
-  #endif // DEBUG_MODE
-
-  #ifdef DEBUG_MODE
-  stop_watch.Start();
-  #endif // DEBUG_MODE
-
   // use a separate cuda stream
   cudaStream_t stream;
   HANDLE_ERROR(cudaStreamCreate(&stream));
@@ -140,7 +115,7 @@ void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
   // pass through network
   cudaEvent_t event_input_consumed; // triggered when buffer can be refilled, not used here
   HANDLE_ERROR(cudaEventCreate(&event_input_consumed));
-  this->context_->enqueueV2(&((this->device_buffers_)[this->input_binding_index_]), stream, &event_input_consumed); // version 2 is without batch size
+  context->enqueueV2(&((this->device_buffers_)[this->input_binding_index_]), stream, &event_input_consumed); // version 2 is without batch size
 
   // retrieve semantic class confidences
   for(int class_index=0; class_index<this->semantic_output_channels_; class_index++) {
@@ -173,14 +148,33 @@ void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
   HANDLE_ERROR(cudaStreamSynchronize(stream));
   HANDLE_ERROR(cudaStreamDestroy(stream));
 
-  #ifdef DEBUG_MODE
-  double inference_time = stop_watch.ElapsedTime();
-  ROS_INFO("Network inference time (including data transfer): %f ms (%f fps)", 1000.0*inference_time, 1.0/inference_time);
-  #endif // DEBUG_MODE
+  context->destroy();
 
   // postprocessing
   this->kSemanticLabeler_.Infer(result);
   this->kStemExtractor_.Infer(result);
+
+  #ifdef DEBUG_MODE
+  double inference_time = stop_watch.ElapsedTime();
+  ROS_INFO("Network inference time (including data transfer): %f ms (%f fps)", 1000.0*inference_time, 1.0/inference_time);
+
+  // also write inference times to file
+  std::string log_file_name = "/tmp/"+fs::path(this->filepath_).stem().string()
+                              +"_tensorrt_network_inference_times.txt";
+  std::ifstream log_file_in;
+  std::ofstream log_file;
+  log_file_in.open(log_file_name);
+  if (!log_file_in.good()) {
+    // does not exists yet, write header
+    log_file.open(log_file_name);
+    log_file << "#   inference time [ms]   fps [s^-1]   (TensorRT)\n";
+    log_file.close();
+  }
+
+  log_file.open(log_file_name, std::ofstream::app);
+  log_file << 1000.0*inference_time << "   " << 1.0/inference_time << "\n";
+  log_file.close();
+  #endif // DEBUG_MODE
 
   #endif // TENSORRT_AVAILABLE
 }
@@ -189,7 +183,7 @@ void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
 bool TensorrtNetwork::IsReadyToInfer() const {
   ASSERT_TENSORRT_AVAILABLE;
   #ifdef TENSORRT_AVAILABLE
-  if (this->engine_) {return true;}
+  if (this->engine_exists_) {return true;}
   return false;
   #endif // TENSORRT_AVAILABLE
 }
@@ -198,6 +192,11 @@ bool TensorrtNetwork::IsReadyToInfer() const {
 void TensorrtNetwork::Load(const std::string& kFilepath, const bool kForceRebuild) {
   ASSERT_TENSORRT_AVAILABLE;
   #ifdef TENSORRT_AVAILABLE
+
+  #ifdef DEBUG_MODE
+  // remember filepath for debug purposes
+  this->filepath_ = kFilepath;
+  #endif // DEBUG_MODE
 
   std::string kEngineFilepath = (fs::path(kFilepath).parent_path()/(fs::path(kFilepath).stem().string()+".engine")).string();
 
@@ -216,9 +215,9 @@ void TensorrtNetwork::Load(const std::string& kFilepath, const bool kForceRebuil
     auto parser = nvonnxparser::createParser(*network, this->logger_);
     if(!parser->parseFromFile(kFilepath.c_str(),
          static_cast<int>(this->logger_.getReportableSeverity()))){
-      if (parser) {parser->destroy(); parser = nullptr;}
-      if (builder) {builder->destroy(); builder = nullptr;}
-      if (network) {network->destroy(); network = nullptr;}
+      parser->destroy();
+      builder->destroy();
+      network->destroy();
       throw std::runtime_error("Cannnot parse model file: '"+kFilepath+"'");
     }
 
@@ -226,13 +225,14 @@ void TensorrtNetwork::Load(const std::string& kFilepath, const bool kForceRebuil
     auto config = builder->createBuilderConfig();
     config->setMaxWorkspaceSize(1<<20);
 
-    if(this->engine_){this->engine_->destroy(); this->engine_ = nullptr;}
+    if (this->engine_exists_) {this->engine_->destroy(); this->engine_exists_ = false;}
     this->engine_ = builder->buildEngineWithConfig(*network, *config);
+    this->engine_exists_ = true;
 
-    if (parser) {parser->destroy(); parser = nullptr;}
-    if (builder) {builder->destroy(); builder = nullptr;}
-    if (config) {config->destroy(); config = nullptr;}
-    if (network) {network->destroy(); network = nullptr;}
+    parser->destroy();
+    builder->destroy();
+    config->destroy();
+    network->destroy();
 
     // store model to disk
     auto serialized_model = this->engine_->serialize();
@@ -241,7 +241,7 @@ void TensorrtNetwork::Load(const std::string& kFilepath, const bool kForceRebuil
     } else {
       std::ofstream serialized_model_output_file(kEngineFilepath, std::ios::binary);
       serialized_model_output_file.write(reinterpret_cast<const char*>(serialized_model->data()), serialized_model->size());
-      serialized_model->destroy(); serialized_model = nullptr;
+      serialized_model->destroy();
     }
   }
   this->ReadBindingsAndAllocateBufferMemory();
@@ -279,8 +279,6 @@ bool TensorrtNetwork::LoadSerialized(const std::string& kFilepath) {
 
   model_stream.read(reinterpret_cast<char*>(model_memory), kModelSize);
 
-  if (this->engine_) {this->engine_->destroy(); this->engine_ = nullptr;}
-
   nvinfer1::IRuntime* runtime = nvinfer1::createInferRuntime(this->logger_);
 
   if (!runtime) {
@@ -289,10 +287,12 @@ bool TensorrtNetwork::LoadSerialized(const std::string& kFilepath) {
     return false;
   }
 
+  if (this->engine_exists_) {this->engine_->destroy(); this->engine_exists_ = false;}
   this->engine_ = runtime->deserializeCudaEngine(model_memory, kModelSize, nullptr);
+  this->engine_exists_ = true;
 
   if (model_memory) {free(model_memory); model_memory = nullptr;}
-  if (runtime) {runtime->destroy(); runtime = nullptr;};
+  runtime->destroy();
 
   return true;
   #endif // TENSORRT_AVAILABLE
@@ -304,10 +304,9 @@ void TensorrtNetwork::ReadBindingsAndAllocateBufferMemory() {
   #ifdef TENSORRT_AVAILABLE
   // free whatever is buffered now
   this->FreeBufferMemory();
-  // will also clear and shrink the vectors
 
   // make sure we have an engine loaded
-  if (!this->engine_) {
+  if (!this->engine_exists_) {
     throw std::runtime_error("No engine loaded.");
   }
 
@@ -343,7 +342,9 @@ void TensorrtNetwork::ReadBindingsAndAllocateBufferMemory() {
     std::cout << ") and total size " << binding_size << ".\n";
 
     // allocate host and device memory according to the determined binding size
-    HANDLE_ERROR(cudaMalloc(&(this->device_buffers_[binding_index]), 4*binding_size)); // 4 bytes per float
+    void* device_buffer;
+    HANDLE_ERROR(cudaMalloc(&device_buffer, 4*binding_size)); // 4 bytes per float
+    this->device_buffers_.emplace_back(device_buffer);
   }
 
   this->input_binding_index_ = this->engine_->getBindingIndex("input");
@@ -384,17 +385,15 @@ void TensorrtNetwork::ReadBindingsAndAllocateBufferMemory() {
     throw std::runtime_error("Expected binding to have two channels: 'stem_offset_output'");
   }
 
-  /*
   // check if input size equals output size -- this is not the case any longer as we use an initial, strided convolution for downsampling
-  if (!(this->input_width_==this->semantic_output_width_
-        && this->input_width_==this->stem_keypoint_output_width_
-        && this->input_width_==this->stem_offset_output_width_
-        && this->input_height_==this->semantic_output_height_
-        && this->input_height_==this->stem_keypoint_output_height_
-        && this->input_height_==this->stem_offset_output_height_)) {
-    throw std::runtime_error("Expect all inputs and ouputs to have the same height and width.");
-  }
-  */
+  // if (!(this->input_width_==this->semantic_output_width_
+        //&& this->input_width_==this->stem_keypoint_output_width_
+        //&& this->input_width_==this->stem_offset_output_width_
+        //&& this->input_height_==this->semantic_output_height_
+        //&& this->input_height_==this->stem_keypoint_output_height_
+        //&& this->input_height_==this->stem_offset_output_height_)) {
+    //throw std::runtime_error("Expect all inputs and ouputs to have the same height and width.");
+  //}
 
   if (!(this->input_channels_==this->mean_.size()
         &&this->input_channels_==this->std_.size())){
@@ -417,7 +416,6 @@ void TensorrtNetwork::FreeBufferMemory() {
     #ifdef TENSORRT_AVAILABLE
     if (this->device_buffers_[buffer_index]) {
       HANDLE_ERROR(cudaFree(this->device_buffers_[buffer_index]));
-      this->device_buffers_[buffer_index] = nullptr;
     }
     #endif // TENSORRT_AVAILABLE
   }

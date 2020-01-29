@@ -4,10 +4,16 @@ input_height: 966
 input_width: 1296
 input_channels: 4
 keypoint_radius: 15.0
-threshold_sugar_beet: 0.44 # confidence threshold to be labeled as sugar beet
-threshold_weed: 0.99 # to be labeled as weed ( for thresholds <=0.5 sugar beet has priority)
+threshold_sugar_beet: 0.73 # confidence threshold to be labeled as sugar beet
+threshold_weed: 0.95 # to be labeled as weed ( for thresholds <=0.5 sugar beet has priority)
 stem_extraction_kernel_size_votes: 3 # pixels also vote for neighbors within this window, should be odd
 stem_extraction_kernel_size_peaks: 5 # non-maximum suppression for all peaks in this window, should be odd
 stem_extraction_threshold_votes: 0.001 # pixel with a keypoint confidence below this value do not cast votes at all
 stem_extraction_threshold_peaks: 0.1 # only pixels with accumulated votes larger than this value are considered as stems
+
 architecture_name: "densenet56"
+
+# other architectures
+# architecture_name: "densenet56s"
+# architecture_name: "hardnet56"
+# architecture_name: "hardnet56s"

@@ -26,28 +26,57 @@ namespace igg {
 
 namespace fs = boost::filesystem;
 
+/*
+
+std::unique_ptr<Network> MakeNetwork(const NetworkParameters kNetworkParameters,
+                                     const SemanticLabelerParameters kSemanticLabelerParameters,
+                                     const StemExtractorParameters kStemExtractorParameters) {
+
+  return std::make_unique<TensorrtNetwork>(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
+
+                                     }
+*/
+
 CropDetection::CropDetection(ros::NodeHandle& node_handle,
                              const std::string& kRgbImageTopic,
                              const std::string& kNirImageTopic,
                              const std::string& kArchitectureName,
-                             const NetworkParameters& kNetworkParameters,
-                             const SemanticLabelerParameters& kSemanticLabelerParameters,
-                             const StemExtractorParameters& kStemExtractorParameters):
-      node_handle_{node_handle},
-      rgb_image_subscriber_{this->node_handle_, kRgbImageTopic, 1},
-      nir_image_subscriber_{this->node_handle_, kNirImageTopic, 1},
+                             const NetworkParameters kNetworkParameters,
+                             const SemanticLabelerParameters kSemanticLabelerParameters,
+                             const StemExtractorParameters kStemExtractorParameters):
+      rgb_image_subscriber_{node_handle, kRgbImageTopic, 1},
+      nir_image_subscriber_{node_handle, kNirImageTopic, 1},
       time_synchronizer_{this->rgb_image_subscriber_, this->nir_image_subscriber_, 10} {
 
   ROS_INFO("Init crop detection node.");
+
+  try {
+    ROS_INFO("Attempt to init TensorRT network.");
+    //if (this->network_) {this->network_.reset(); this->network_ = nullptr;}
+    this->network_ = std::make_unique<TensorrtNetwork>(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
+    this->network_->Load((Network::ModelsDir()/(kArchitectureName+".onnx")).string(), false); // false as we do not enforce rebuilding the model
+  } catch (const std::exception& kError) {
+    ROS_WARN("Cannot init TensorRT network ('%s'). Trying Torch.", kError.what());
+    try {
+      //if (this->network_) {this->network_.reset(); this->network_ = nullptr;}
+      this->network_ = std::make_unique<PytorchNetwork>(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
+      this->network_->Load((Network::ModelsDir()/(kArchitectureName+".pt")).string(), false);
+    } catch (const std::exception& kError) {
+      ROS_ERROR("Cannot initialize any network ('%s'). Shutdown.", kError.what());
+      ros::requestShutdown();
+    }
+  }
 
   // Register callback
   this->time_synchronizer_.registerCallback(boost::bind(&CropDetection::Callback, this, _1, _2));
 
   // Advertise network output topic
-  image_transport::ImageTransport transport(this->node_handle_);
+  ROS_INFO("Advertise crop detection topics.");
+
+  image_transport::ImageTransport transport(node_handle);
 
   this->semantic_labels_publisher_ = transport.advertise("semantic_labels", 1);
-  this->stem_positions_publisher_ = this->node_handle_.advertise<ros_crop_detection::StemPositions>("stem_positions", 1);
+  this->stem_positions_publisher_ = node_handle.advertise<ros_crop_detection::StemPositions>("stem_positions", 1);
 
   this->input_bgr_publisher_ = transport.advertise("input_bgr", 1);
   this->input_nir_publisher_ = transport.advertise("input_nir", 1);
@@ -58,23 +87,6 @@ CropDetection::CropDetection(ros::NodeHandle& node_handle,
   this->visualization_weed_confidence_publisher_ = transport.advertise("visualization_weed_confidence", 1);
   this->visualization_keypoints_publisher_ = transport.advertise("visualization_keypoints", 1);
   this->visualization_votes_publisher_ = transport.advertise("visualization_votes", 1);
-
-  try {
-    ROS_INFO("Attempt to init TensorRT network.");
-    if (this->network_) {this->network_.reset();}
-    this->network_ = std::make_unique<TensorrtNetwork>(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
-    this->network_->Load((Network::ModelsDir()/(kArchitectureName+".onnx")).string(), false); // false as we do not enforce rebuilding the model
-  } catch (const std::exception& kError) {
-    ROS_WARN("Cannot init TensorRT network ('%s'). Trying Torch.", kError.what());
-    try {
-      if (this->network_) {this->network_.reset();}
-      this->network_ = std::make_unique<PytorchNetwork>(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
-      this->network_->Load((Network::ModelsDir()/(kArchitectureName+".pt")).string(), false);
-    } catch (const std::exception& kError) {
-      ROS_ERROR("Cannot initialize any network ('%s'). Shutdown.", kError.what());
-      ros::requestShutdown();
-    }
-  }
 }
 
 

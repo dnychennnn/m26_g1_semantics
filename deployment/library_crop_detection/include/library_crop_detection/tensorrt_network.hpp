@@ -3,7 +3,6 @@
 /*!
  * @file tensorrt_network.hpp
  *
- * @author Jan Quakernack
  * @version 0.1
  */
 
@@ -101,10 +100,16 @@ private:
   void* host_buffer_ = nullptr; // for input only, memory for results is provided by igg::NetworkInference
   std::vector<void*> device_buffers_; // one for each binding
 
+  #ifdef DEBUG_MODE
+  // filepath for debug purposes
+  std::string filepath_ = "";
+  #endif // DEBUG_MODE
+
+  bool engine_exists_ = false;
+
   #ifdef TENSORRT_AVAILABLE
   TensorrtNetworkLogger logger_;
-  nvinfer1::ICudaEngine* engine_ = nullptr;
-  nvinfer1::IExecutionContext* context_ = nullptr;
+  nvinfer1::ICudaEngine* engine_;
   #endif // TENSORRT_AVAILABLE
 
   const SemanticLabeler kSemanticLabeler_;

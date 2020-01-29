@@ -34,9 +34,9 @@ public:
                 const std::string& kRgbImageTopic,
                 const std::string& kNirImageTopic,
                 const std::string& kArchitectureName,
-                const NetworkParameters& kNetworkParameters,
-                const SemanticLabelerParameters& kSemanticLabelerParameters,
-                const StemExtractorParameters& kStemExtractorParameters);
+                const NetworkParameters kNetworkParameters,
+                const SemanticLabelerParameters kSemanticLabelerParameters,
+                const StemExtractorParameters kStemExtractorParameters);
 
   ~CropDetection();
 
@@ -47,9 +47,6 @@ private:
    */
   void Callback(const sensor_msgs::ImageConstPtr& kRgbImageMessage,
                 const sensor_msgs::ImageConstPtr& kNirImageMessage);
-
-  //! ROS node handle.
-  ros::NodeHandle& node_handle_;
 
   //! Subscriber to RGB image topic.
   message_filters::Subscriber<sensor_msgs::Image> rgb_image_subscriber_;
