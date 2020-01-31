@@ -275,8 +275,8 @@ def _apply_predefined_thresholds(
             confidence_threshold,
             target_mask)
 
-        metrics['P{}'.format(beta_text)]: precision
-        metrics['R{}'.format(beta_text)]: recall
+        metrics['P{}'.format(beta_text)] = precision.item()
+        metrics['R{}'.format(beta_text)] = recall.item()
 
         print('  P{}: {:.02f}%'.format(beta_text, 100.0*precision))
         print('  R{}: {:.02f}%'.format(beta_text, 100.0*recall))
@@ -409,7 +409,7 @@ def compute_average_precision_stems(stem_positions_output, stem_positions_target
             'stem')
     _make_precision_recall_output(precisions, recalls, confidence_thresholds, path/'precision_recall', '{}_stem'.format(filename))
 
-    metrics['AP'] = average_precision
+    metrics['AP'] = average_precision.item()
 
     return metrics
 
@@ -456,8 +456,8 @@ def _apply_predefined_thresholds_stems(
             predicted_within_tolerance,
             predicted_max_confidence_within_tolerance)
 
-        metrics['P{}'.format(beta_text)]: precision
-        metrics['R{}'.format(beta_text)]: recall
+        metrics['P{}'.format(beta_text)] = precision.item()
+        metrics['R{}'.format(beta_text)] = recall.item()
 
         print('  P{}: {:.02f}%'.format(beta_text, 100.0*precision))
         print('  R{}: {:.02f}%'.format(beta_text, 100.0*recall))
