@@ -47,10 +47,10 @@ class SugarBeetDataset(Dataset):
         dataset_parameters['filenames_filter'] = load_config(split+'_split.yaml')
 
         # hack for evaluation on test set
-        # if split=='val':
-            # dataset_parameters['filenames_filter'] = load_config('test_split.yaml')
-        # else:
-            # dataset_parameters['filenames_filter'] = load_config(split+'_split.yaml')
+        if split=='val':
+            dataset_parameters['filenames_filter'] = load_config('test_split.yaml')
+        else:
+            dataset_parameters['filenames_filter'] = load_config(split+'_split.yaml')
 
         # data augmentation for train split
         if split=='train':

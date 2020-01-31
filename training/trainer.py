@@ -409,9 +409,7 @@ class Trainer:
             yaml.dump(losses, yaml_file)
 
 
-    def write_metrics_to_file(self, path, metrics, filename, class_names=['background', 'weed', 'sugar_beet']):
-        metrics['class_names'] = class_names
-
+    def write_metrics_to_file(self, path, metrics, filename):
         metrics_dir_path = path/'metrics'
         if not metrics_dir_path.exists():
             metrics_dir_path.mkdir()
@@ -436,9 +434,6 @@ class Trainer:
         accumulated_confusion_matrix_stem_val = np.zeros((2,2), np.long)
         accumulated_deviation_val = 0.0
 
-        # max_num_batches = 10
-        # num_batches = max_num_batches # len(self.data_loader_val)
-
         num_batches = len(self.data_loader_val)
 
         all_semantic_outputs = np.zeros((num_batches, 3, self.target_height, self.target_width), dtype=np.float32)
@@ -449,9 +444,6 @@ class Trainer:
 
         for batch_index, (input_batch, target_batch) in enumerate(self.data_loader_val):
             self.model.eval()
-
-            # if batch_index>=max_num_batches:
-                # break;
 
             # unpack batch
             semantic_target_batch = target_batch['semantic']
@@ -532,7 +524,7 @@ class Trainer:
             accumulated_deviation_val += deviation_val
 
             # debug
-            if test_run and batch_index==3:
+            if test_run and batch_index==1:
                 break
 
         # average and save val losses
@@ -559,13 +551,18 @@ class Trainer:
                               filename=self.current_checkpoint_name+'_val.png')
 
         # make plot of class-wise precision-recall curve and compute average precision
-        average_precisions = precision_recall_curve_and_average_precision(
+        metrics_val = precision_recall_curve_and_average_precision(
             all_semantic_outputs, all_semantic_targets,
             path=self.current_checkpoint_dir,
-            filename=self.current_checkpoint_name+'precision_recall')
+            filename=self.current_checkpoint_name+'_precision_recall')
 
         # compute average precision of stem detection
-        average_precision_stems = compute_average_precision_stems(all_stem_outputs, all_stem_targets, self.tolerance_radius)
+        metrics_val_stems = compute_average_precision_stems(
+            all_stem_outputs,
+            all_stem_targets,
+            self.tolerance_radius,
+            path=self.current_checkpoint_dir,
+            filename=self.current_checkpoint_name+'_precision_recall')
 
         # make plot of confusion matrix
         plot_confusion_matrix(self.current_checkpoint_dir,
@@ -574,49 +571,30 @@ class Trainer:
                               class_names=['stem', 'no_stem'],
                               filename=self.current_checkpoint_name+'_stem_val.png')
 
-        # calculate metrics on accumulated confusion matrix
-        metrics_val = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_val)
+        # calculate metrics on accumulated confusion matrix - updated, use average precision instead
+        # metrics_val = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_val)
 
-        # add average precision to metric dict
-        metrics_val['average_precision'] = [-1.0]+average_precisions # no average precision for background
-
-        # calculate metrics for stem detection
+        # calculate metrics for stem detection -- updated, use average precision instead
         # NOTE we do not have a valid number of false negatives for stem detection, so some metrics computed here will not be valid
-        metrics_stem_val = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_stem_val)
-
-        metrics_stem_val['average_precision'] = average_precision_stems.item()
-
-        mean_average_precision = 0.5*(average_precisions[0]+average_precisions[1]) # without background
-        mean_iou = np.mean(np.asarray(metrics_val['iou'])[1:]) # without background
+        # metrics_stem_val = compute_metrics_from_confusion_matrix(accumulated_confusion_matrix_stem_val)
 
         print("Write metrics of split 'val' to tensorboard log.")
-        self.summary_writer.add_scalar('iou_background/val', metrics_val['iou'][0], global_step=self.current_checkpoint_index)
-        self.summary_writer.add_scalar('iou_weed/val', metrics_val['iou'][1], global_step=self.current_checkpoint_index)
-        self.summary_writer.add_scalar('iou_sugar_beet/val', metrics_val['iou'][2], global_step=self.current_checkpoint_index)
-        self.summary_writer.add_scalar('mean_iou/val', metrics_val['iou'][2], global_step=self.current_checkpoint_index)
-        self.summary_writer.add_scalar('ap_sugar_beet/val', average_precisions[1], global_step=self.current_checkpoint_index)
-        self.summary_writer.add_scalar('ap_weed/val', average_precisions[0], global_step=self.current_checkpoint_index)
-        self.summary_writer.add_scalar('mean_ap/val', mean_average_precision, global_step=self.current_checkpoint_index)
-        self.summary_writer.add_scalar('ap_stems/val', average_precision_stems.item(), global_step=self.current_checkpoint_index)
+        self.summary_writer.add_scalar('ap_sugar_beet/val', metrics_val['sugar_beet']['AP'], global_step=self.current_checkpoint_index)
+        self.summary_writer.add_scalar('ap_weed/val', metrics_val['weed']['AP'], global_step=self.current_checkpoint_index)
+        self.summary_writer.add_scalar('ap_stems/val', metrics_val_stems['AP'], global_step=self.current_checkpoint_index)
 
         print("Write metrics of split 'val' to yaml.")
         self.write_metrics_to_file(self.current_checkpoint_dir,
-                                   metrics_val, filename=self.current_checkpoint_name+'_val.yaml')
+                                   metrics_val,
+                                   filename=self.current_checkpoint_name+'_val.yaml')
         self.write_metrics_to_file(self.current_checkpoint_dir,
-                                   metrics_stem_val, class_names=['stem', 'no_stem'],
+                                   metrics_val_stems,
                                    filename=self.current_checkpoint_name+'_stem_val.yaml')
 
-        print('  Mean AP (without background): {:.04f}'.format(mean_average_precision))
-        print("  AP 'weed': {:.04f}".format(average_precisions[0]))
-        print("  AP 'sugar beet': {:.04f}".format(average_precisions[1]))
-        print('  Mean IoU@({:.02f}, {:.02f}) (without background): {:.04f}'.format(self.weed_threshold, self.sugar_beet_threshold, mean_iou))
-        print("  IoU@{:.02f} 'weed': {:.04f}".format(self.weed_threshold, metrics_val['iou'][1]))
-        print("  IoU@{:.02f} 'sugar beet': {:.04f}".format(self.sugar_beet_threshold, metrics_val['iou'][2]))
-        print("  Precision@{:.02f} stem detection with {:.01f} px tolerance: {:.04f}".format(self.stem_inference_threshold_peaks,
-            self.tolerance_radius, metrics_stem_val['precision'][0]))
-        print("  Recall@{:.02f} stem detection with {:.01f} px tolerance: {:.04f}".format(self.stem_inference_threshold_peaks,
-            self.tolerance_radius, metrics_stem_val['recall'][0]))
-        print("  Mean deviation stems within {:.01f} px tolerance: {:.04f} px".format(
+        print('  AP (sugar beet): {:.02f}%'.format(100.0*metrics_val['sugar_beet']['AP']))
+        print('  AP (weed)      : {:.02f}%'.format(100.0*metrics_val['sugar_beet']['AP']))
+        print('  AP (stems)     : {:.02f}%'.format(100.0*metrics_val_stems['AP']))
+        print('  Mean deviation stems within {:.01f} px tolerance: {:.04f} px'.format(
             self.tolerance_radius, accumulated_deviation_val/(accumulated_confusion_matrix_stem_val[0, 0]+1e-6)))
 
         # print to what extent we confused beet and weed
@@ -625,8 +603,8 @@ class Trainer:
         predicted_weed_but_actual_beet = accumulated_confusion_matrix_val[2, 1]
         predicted_beet_but_actual_weed = accumulated_confusion_matrix_val[1, 2]
 
-        print("Actual beet pixels predicted as weed: {:.02f}%".format(100.0*predicted_weed_but_actual_beet/actual_beet_total))
-        print("Actual weed pixels predicted as beet: {:.02f}%".format(100.0*predicted_beet_but_actual_weed/actual_weed_total))
+        print("  Actual beet pixels predicted as weed: {:.02f}%".format(100.0*predicted_weed_but_actual_beet/actual_beet_total))
+        print("  Actual weed pixels predicted as beet: {:.02f}%".format(100.0*predicted_beet_but_actual_weed/actual_weed_total))
 
 
     def stem_positions_to_list(self, stem_position_target_batch, stem_count_target_batch):

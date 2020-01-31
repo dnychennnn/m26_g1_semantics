@@ -251,12 +251,20 @@ def make_plot_from_stem_output(input_rgb,
     if stem_position_target is not None:
         for position in stem_position_target:
             x, y = position[0], position[1]
-            draw_marker(x, y, (0.75, 0.0, 0.0), 2)
+            draw_marker(x, y, (0.75, 0.0, 0.0), 3)
 
     if stem_position_output is not None:
         for position in stem_position_output:
-            x, y = position[0], position[1]
-            draw_marker(x, y, (0.5, 0.5, 0.5), 1)
+            confidence = position[2].item()
+            if confidence>0.1:
+                alpha = min(max(0.5*confidence, 0.1), 0.5)
+                thickness = min(max(int(round(2.0*confidence)), 1), 2)
+                x, y = position[0], position[1]
+                draw_marker(x, y, (alpha, alpha, alpha), thickness)
+
+                cv2.putText(markers, '{:.02f}'.format(confidence),
+                            (x+keypoint_radius, y+keypoint_radius),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0.5, 0.5, 0.5), 1)
 
     plot = plot+1.0*markers
     plot = np.clip(plot, 0.0, 1.0)

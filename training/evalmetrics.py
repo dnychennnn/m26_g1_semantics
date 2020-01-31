@@ -174,15 +174,15 @@ def plot_confusion_matrix(path,
 
 def precision_recall_curve_and_average_precision(semantic_outputs, semantic_targets, path, filename):
     average_precisions = []
+    metrics = {}
 
     valid_pixels = semantic_targets!=3
     for class_label, class_name in [(1, 'weed'), (2, 'sugar_beet')]:
         valid_outputs = semantic_outputs[:, class_label][valid_pixels]
         valid_targets = semantic_targets[valid_pixels]==class_label
-        average_precision = _single_class_precision_recall(valid_outputs, valid_targets, class_name, path, filename)
-        average_precisions.append(average_precision)
+        metrics[class_name] = _single_class_precision_recall(valid_outputs, valid_targets, class_name, path, filename)
 
-    return average_precisions
+    return metrics
 
 
 def _single_class_precision_recall(semantic_outputs, target_mask, class_name, path, filename, eps=1e-6):
@@ -224,23 +224,26 @@ def _single_class_precision_recall(semantic_outputs, target_mask, class_name, pa
 
     average_precision = sum_precision/num_recall_thresholds
 
-    f1_scores = 2.0*precisions*recalls/(precisions+recalls+eps)
-    index_max_f1 = np.argmax(f1_scores)
-    index_max_iou = np.argmax(ious)
+    metrics = _threshold_info(precisions, recalls, confidence_thresholds, class_name)
+    _make_precision_recall_output(precisions, recalls, confidence_thresholds, path/'precision_recall', '{}_{}'.format(filename, class_name))
 
-    print('Average precision ({}): {:.4f}'.format(class_name, average_precision))
-    print('Confidence threshold for maximum F1 {:.4f} ({}): {:.2f}'.format(f1_scores[index_max_f1], class_name, confidence_thresholds[index_max_f1]))
-    print('Confidence threshold for maximum IoU {:.4f} ({}): {:.2f}'.format(ious[index_max_iou], class_name, confidence_thresholds[index_max_iou]))
+    metrics['AP'] = average_precision.item()
 
-    # plotting
+    return metrics
+
+
+def _make_precision_recall_output(precisions, recalls, confidence_thresholds, path, filename):
+    # sort
     indices = np.argsort(recalls)
     recalls = recalls[indices]
     confidence_thresholds = confidence_thresholds[indices]
     precisions = precisions[indices]
 
+    path.mkdir(exist_ok=True, parents=True)
+
     # set all obtained precisions to max precision for given recall threshold
-    for index in range(num_confidence_thresholds):
-        precisions[index] = np.max(precisions[index:])
+    # for index in range(len(recalls)):
+        # precisions[index] = np.max(precisions[index:])
 
     plt.ylim(0.0, 1.1)
     plt.ylabel('precision')
@@ -259,19 +262,23 @@ def _single_class_precision_recall(semantic_outputs, target_mask, class_name, pa
     plt.scatter(recalls, precisions, s=5, c=np.array([0.2, 0.2, 0.8]).reshape(1, -1))
 
     # put confidence threshold as text
-    for index in range(0, num_confidence_thresholds, 10):
+    for index in range(0, len(recalls), 10):
         text = '{:.02f}'.format(confidence_thresholds[index])
         plt.annotate(text, (recalls[index], precisions[index]))
 
-    path = path/("precision_recall/{}_{}.png".format(filename, class_name))
-    path.parent.mkdir(exist_ok=True, parents=True)
-    plt.savefig(str(path), bbox_inches='tight')
+    plot_path = path/('{}.png'.format(filename))
+    plt.savefig(str(plot_path), bbox_inches='tight')
     plt.close('all')
 
-    return average_precision.item()
+    # also output as csv text file
+    text_path = path/('{}.txt'.format(filename))
+    with text_path.open('w+') as text_file:
+        text_file.write('#   recall   precision   threshold\n')
+        for index in range(len(recalls)):
+            text_file.write('{}   {}   {}\n'.format(recalls[index].item(), precisions[index].item(), confidence_thresholds[index].item()))
 
 
-def compute_average_precision_stems(stem_positions_output, stem_positions_target, tolerance_radius, eps=1e-6):
+def compute_average_precision_stems(stem_positions_output, stem_positions_target, tolerance_radius, path, filename, eps=1e-6):
     num_images = len(stem_positions_output)
 
     num_confidence_thresholds = 101
@@ -339,12 +346,56 @@ def compute_average_precision_stems(stem_positions_output, stem_positions_target
     # plt.show()
 
     average_precision = sum_precision/num_recall_thresholds
-
-    f1_scores = 2.0*precisions*recalls/(precisions+recalls+eps)
-    index_max_f1 = np.argmax(f1_scores)
-
     print('Average precision (stems): {:.4f}'.format(average_precision))
-    print('Score threshold for maximum F1 {:.4f} (stems): {:.2f}'.format(f1_scores[index_max_f1], confidence_thresholds[index_max_f1]))
 
-    return average_precision
+    metrics = _threshold_info(precisions, recalls, confidence_thresholds, 'stem')
+    _make_precision_recall_output(precisions, recalls, confidence_thresholds, path/'precision_recall', '{}_stem'.format(filename))
+
+    metrics['AP'] = average_precision
+
+    return metrics
+
+
+def _threshold_info(precisions, recalls, confidence_thresholds, name, eps=1e-6):
+    """Print how to choose the threshold to recieve maximum F1, F0.5 and F2.
+
+    F-metrics weight precision and recall differently. Details in the reference.
+
+    Reference: https://www.toyota-ti.ac.jp/Lab/Denshi/COIN/people/yutaka.sasaki/F-measure-YS-26Oct07.pdf
+    """
+
+    def compute_f(beta):
+        return (beta**2.0+1.0)*precisions*recalls/(beta**2.0*precisions+recalls+eps)
+
+    f1_scores = compute_f(beta=1.0)
+    fdot5_scores = compute_f(beta=0.5)
+    f2_scores = compute_f(beta=2.0)
+
+    index_max_f1 = np.argmax(f1_scores)
+    index_max_fdot5 = np.argmax(fdot5_scores)
+    index_max_f2 = np.argmax(f2_scores)
+
+    print('{}:'.format(name))
+
+    print('  Threshold: {:.2f}'.format(confidence_thresholds[index_max_f1]))
+    print('  F1       : {:.2f}'.format(f1_scores[index_max_f1]))
+    print('  P        : {:.2f}'.format(precisions[index_max_f1]))
+    print('  R        : {:.2f}'.format(recalls[index_max_f1]))
+
+    print('  Threshold: {:.2f}'.format(confidence_thresholds[index_max_fdot5]))
+    print('  F.5      : {:.2f}'.format(fdot5_scores[index_max_fdot5]))
+    print('  P        : {:.2f}'.format(precisions[index_max_fdot5]))
+    print('  R        : {:.2f}'.format(recalls[index_max_fdot5]))
+
+    print('  Threshold: {:.2f}'.format(confidence_thresholds[index_max_f2]))
+    print('  F2       : {:.2f}'.format(f2_scores[index_max_f2]))
+    print('  P        : {:.2f}'.format(precisions[index_max_f2]))
+    print('  R        : {:.2f}'.format(recalls[index_max_f2]))
+
+    return {'P1': precisions[index_max_f1].item(),
+            'R1': recalls[index_max_f1].item(),
+            'P.5': precisions[index_max_fdot5].item(),
+            'R.5': recalls[index_max_fdot5].item(),
+            'P2': precisions[index_max_f2].item(),
+            'R2': recalls[index_max_f2].item()}
 
