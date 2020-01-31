@@ -1,6 +1,5 @@
 architecture_name: 'hardnet56'
 path_to_weights_file: 'hardnet56_cp_10.pth'
-#path_to_weights_file: ''
 
 batch_size: 2
 input_channels: 4
@@ -31,7 +30,7 @@ provide_as_output_per_stage: [True, True, True, True]
 channels_weighting_factor: 1.6
 dropout_rate: 0.2
 
-sugar_beet_threshold: 0.68
-weed_threshold: 0.88
-
-stem_score_threshold: 0.51
+# for maximum F1, F.5, F2 on val split
+sugar_beet_thresholds: [0.68, 0.85, 0.40]
+weed_thresholds: [0.88, 0.96, 0.69]
+stem_score_thresholds: [0.51, 0.82, 0.22]

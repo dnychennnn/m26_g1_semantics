@@ -29,7 +29,7 @@ do_downsampling_per_stage: [True, True, True, False]
 provide_as_output_per_stage: [True, True, True, True]
 dropout_rate: 0.2
 
-sugar_beet_threshold: 0.73
-weed_threshold: 0.95
-
-stem_score_threshold: 0.75
+# for maximum F1, F.5, F2 on val split
+sugar_beet_thresholds: [0.73, 0.93, 0.38]
+weed_thresholds: [0.95, 0.98, 0.82]
+stem_score_thresholds: [0.75, 0.93, 0.49]

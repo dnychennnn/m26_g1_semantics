@@ -172,20 +172,26 @@ def plot_confusion_matrix(path,
     plt.close('all')
 
 
-def precision_recall_curve_and_average_precision(semantic_outputs, semantic_targets, path, filename):
+def precision_recall_curve_and_average_precision(semantic_outputs, semantic_targets, predefined_thresholds, path, filename):
     average_precisions = []
     metrics = {}
 
     valid_pixels = semantic_targets!=3
-    for class_label, class_name in [(1, 'weed'), (2, 'sugar_beet')]:
+    for index, (class_label, class_name) in enumerate([(1, 'weed'), (2, 'sugar_beet')]):
         valid_outputs = semantic_outputs[:, class_label][valid_pixels]
         valid_targets = semantic_targets[valid_pixels]==class_label
-        metrics[class_name] = _single_class_precision_recall(valid_outputs, valid_targets, class_name, path, filename)
+        metrics[class_name] = _single_class_precision_recall(
+            valid_outputs,
+            valid_targets,
+            class_name,
+            predefined_thresholds[index] if predefined_thresholds is not None else None,
+            path,
+            filename)
 
     return metrics
 
 
-def _single_class_precision_recall(semantic_outputs, target_mask, class_name, path, filename, eps=1e-6):
+def _single_class_precision_recall(semantic_outputs, target_mask, class_name, predefined_thresholds, path, filename, eps=1e-6):
     num_confidence_thresholds = 101
     confidence_thresholds = np.linspace(0.0, 1.0, num_confidence_thresholds)
 
@@ -194,19 +200,10 @@ def _single_class_precision_recall(semantic_outputs, target_mask, class_name, pa
     ious = np.zeros(num_confidence_thresholds, dtype=np.float)
 
     for index, confidence_threshold in enumerate(confidence_thresholds):
-        predicted_mask = semantic_outputs>=confidence_threshold
-
-        true_positives_mask = np.logical_and(target_mask, predicted_mask)
-        false_positives_mask = np.logical_and(np.logical_not(target_mask), predicted_mask)
-        false_negatives_mask = np.logical_and(target_mask, np.logical_not(predicted_mask))
-
-        true_positives = np.sum(true_positives_mask)
-        false_positives = np.sum(false_positives_mask)
-        false_negatives = np.sum(false_negatives_mask)
-
-        precisions[index] = true_positives/(true_positives+false_positives+eps)
-        recalls[index] = true_positives/(true_positives+false_negatives+eps)
-        ious[index] = true_positives/(true_positives+false_negatives+false_positives+eps)
+        precisions[index], recalls[index] = _precision_recall(
+            semantic_outputs,
+            confidence_threshold,
+            target_mask)
 
     num_recall_thresholds = 101
     recall_thresholds = np.linspace(0.0, 1.0, num_recall_thresholds)
@@ -224,10 +221,65 @@ def _single_class_precision_recall(semantic_outputs, target_mask, class_name, pa
 
     average_precision = sum_precision/num_recall_thresholds
 
-    metrics = _threshold_info(precisions, recalls, confidence_thresholds, class_name)
+    if predefined_thresholds is None:
+        metrics = _optimal_thresholds(precisions, recalls, confidence_thresholds, class_name)
+    else:
+        metrics = _apply_predefined_thresholds(
+            semantic_outputs,
+            predefined_thresholds,
+            target_mask,
+            class_name)
     _make_precision_recall_output(precisions, recalls, confidence_thresholds, path/'precision_recall', '{}_{}'.format(filename, class_name))
 
     metrics['AP'] = average_precision.item()
+
+    return metrics
+
+
+def _precision_recall(
+    semantic_outputs,
+    confidence_threshold,
+    target_mask,
+    eps=1e-6):
+
+    predicted_mask = semantic_outputs>=confidence_threshold
+
+    true_positives_mask = np.logical_and(target_mask, predicted_mask)
+    false_positives_mask = np.logical_and(np.logical_not(target_mask), predicted_mask)
+    false_negatives_mask = np.logical_and(target_mask, np.logical_not(predicted_mask))
+
+    true_positives = np.sum(true_positives_mask)
+    false_positives = np.sum(false_positives_mask)
+    false_negatives = np.sum(false_negatives_mask)
+
+    precision = true_positives/(true_positives+false_positives+eps)
+    recall = true_positives/(true_positives+false_negatives+eps)
+
+    return precision, recall
+
+
+def _apply_predefined_thresholds(
+    semantic_outputs,
+    predefined_thresholds,
+    target_mask,
+    name,
+    eps=1e-6):
+
+    metrics = {}
+
+    print("'{}':".format(name))
+
+    for index, (confidence_threshold, beta_text) in enumerate(zip(predefined_thresholds, ['1', '.5', '2'])):
+        precision, recall = _precision_recall(
+            semantic_outputs,
+            confidence_threshold,
+            target_mask)
+
+        metrics['P{}'.format(beta_text)]: precision
+        metrics['R{}'.format(beta_text)]: recall
+
+        print('  P{}: {:.02f}%'.format(beta_text, 100.0*precision))
+        print('  R{}: {:.02f}%'.format(beta_text, 100.0*recall))
 
     return metrics
 
@@ -278,7 +330,7 @@ def _make_precision_recall_output(precisions, recalls, confidence_thresholds, pa
             text_file.write('{}   {}   {}\n'.format(recalls[index].item(), precisions[index].item(), confidence_thresholds[index].item()))
 
 
-def compute_average_precision_stems(stem_positions_output, stem_positions_target, tolerance_radius, path, filename, eps=1e-6):
+def compute_average_precision_stems(stem_positions_output, stem_positions_target, tolerance_radius, predefined_thresholds, path, filename, eps=1e-6):
     num_images = len(stem_positions_output)
 
     num_confidence_thresholds = 101
@@ -317,15 +369,12 @@ def compute_average_precision_stems(stem_positions_output, stem_positions_target
     recalls = np.zeros(num_confidence_thresholds, dtype=np.float)
 
     for index, confidence_threshold in enumerate(confidence_thresholds):
-        greater_threshold = confidences>=confidence_threshold
-
-        true_positives = np.sum(np.logical_and(greater_threshold, actual_within_tolerance))
-        false_positives = np.sum(np.logical_and(greater_threshold, ~actual_within_tolerance))
-        false_negatives = np.sum(np.logical_or(~predicted_within_tolerance,
-                                               predicted_max_confidence_within_tolerance<confidence_threshold))
-
-        precisions[index] = true_positives/(true_positives+false_positives+eps)
-        recalls[index] = true_positives/(true_positives+false_negatives+eps)
+        precisions[index], recalls[index] = _precision_recall_stems(
+            confidences,
+            confidence_threshold,
+            actual_within_tolerance,
+            predicted_within_tolerance,
+            predicted_max_confidence_within_tolerance)
 
     num_recall_thresholds = 101
     recall_thresholds = np.linspace(0.0, 1.0, num_recall_thresholds)
@@ -346,9 +395,18 @@ def compute_average_precision_stems(stem_positions_output, stem_positions_target
     # plt.show()
 
     average_precision = sum_precision/num_recall_thresholds
-    print('Average precision (stems): {:.4f}'.format(average_precision))
+    # print('Average precision (stems): {:.4f}'.format(average_precision))
 
-    metrics = _threshold_info(precisions, recalls, confidence_thresholds, 'stem')
+    if predefined_thresholds is None:
+        metrics = _optimal_thresholds(precisions, recalls, confidence_thresholds, 'stem')
+    else:
+        metrics = _apply_predefined_thresholds_stems(
+            predefined_thresholds,
+            confidences,
+            actual_within_tolerance,
+            predicted_within_tolerance,
+            predicted_max_confidence_within_tolerance,
+            'stem')
     _make_precision_recall_output(precisions, recalls, confidence_thresholds, path/'precision_recall', '{}_stem'.format(filename))
 
     metrics['AP'] = average_precision
@@ -356,8 +414,61 @@ def compute_average_precision_stems(stem_positions_output, stem_positions_target
     return metrics
 
 
-def _threshold_info(precisions, recalls, confidence_thresholds, name, eps=1e-6):
-    """Print how to choose the threshold to recieve maximum F1, F0.5 and F2.
+def _precision_recall_stems(
+        confidences,
+        confidence_threshold,
+        actual_within_tolerance,
+        predicted_within_tolerance,
+        predicted_max_confidence_within_tolerance,
+        eps=1e-6):
+    """Compute precision, recall pair for stem detection for a given threshold.
+    """
+    greater_threshold = confidences>=confidence_threshold
+
+    true_positives = np.sum(np.logical_and(greater_threshold, actual_within_tolerance))
+    false_positives = np.sum(np.logical_and(greater_threshold, ~actual_within_tolerance))
+    false_negatives = np.sum(np.logical_or(~predicted_within_tolerance,
+                                           predicted_max_confidence_within_tolerance<confidence_threshold))
+
+    precision = true_positives/(true_positives+false_positives+eps)
+    recall = true_positives/(true_positives+false_negatives+eps)
+
+    return precision, recall
+
+
+def _apply_predefined_thresholds_stems(
+        predefined_thresholds,
+        confidences,
+        actual_within_tolerance,
+        predicted_within_tolerance,
+        predicted_max_confidence_within_tolerance,
+        name):
+
+    metrics = {}
+
+    print("'{}':".format(name))
+
+    for index, (confidence_threshold, beta_text) in enumerate(zip(predefined_thresholds, ['1', '.5', '2'])):
+        precision, recall = _precision_recall_stems(
+            confidences,
+            confidence_threshold,
+            actual_within_tolerance,
+            predicted_within_tolerance,
+            predicted_max_confidence_within_tolerance)
+
+        metrics['P{}'.format(beta_text)]: precision
+        metrics['R{}'.format(beta_text)]: recall
+
+        print('  P{}: {:.02f}%'.format(beta_text, 100.0*precision))
+        print('  R{}: {:.02f}%'.format(beta_text, 100.0*recall))
+
+    return metrics
+
+
+def _optimal_thresholds(precisions, recalls, confidence_thresholds, name, eps=1e-6):
+    """Choose the threshold to recieve maximum F1, F0.5 and F2.
+
+    Print and return dict of corresponding precision and recall.
 
     F-metrics weight precision and recall differently. Details in the reference.
 
@@ -375,22 +486,22 @@ def _threshold_info(precisions, recalls, confidence_thresholds, name, eps=1e-6):
     index_max_fdot5 = np.argmax(fdot5_scores)
     index_max_f2 = np.argmax(f2_scores)
 
-    print('{}:'.format(name))
+    print("'{}':".format(name))
 
     print('  Threshold: {:.2f}'.format(confidence_thresholds[index_max_f1]))
-    print('  F1       : {:.2f}'.format(f1_scores[index_max_f1]))
-    print('  P        : {:.2f}'.format(precisions[index_max_f1]))
-    print('  R        : {:.2f}'.format(recalls[index_max_f1]))
+    print('  F1       : {:.2f}%'.format(100.0*f1_scores[index_max_f1]))
+    print('  P        : {:.2f}%'.format(100.0*precisions[index_max_f1]))
+    print('  R        : {:.2f}%'.format(100.0*recalls[index_max_f1]))
 
     print('  Threshold: {:.2f}'.format(confidence_thresholds[index_max_fdot5]))
-    print('  F.5      : {:.2f}'.format(fdot5_scores[index_max_fdot5]))
-    print('  P        : {:.2f}'.format(precisions[index_max_fdot5]))
-    print('  R        : {:.2f}'.format(recalls[index_max_fdot5]))
+    print('  F.5      : {:.2f}%'.format(100.0*fdot5_scores[index_max_fdot5]))
+    print('  P        : {:.2f}%'.format(100.0*precisions[index_max_fdot5]))
+    print('  R        : {:.2f}%'.format(100.0*recalls[index_max_fdot5]))
 
     print('  Threshold: {:.2f}'.format(confidence_thresholds[index_max_f2]))
-    print('  F2       : {:.2f}'.format(f2_scores[index_max_f2]))
-    print('  P        : {:.2f}'.format(precisions[index_max_f2]))
-    print('  R        : {:.2f}'.format(recalls[index_max_f2]))
+    print('  F2       : {:.2f}%'.format(100.0*f2_scores[index_max_f2]))
+    print('  P        : {:.2f}%'.format(100.0*precisions[index_max_f2]))
+    print('  R        : {:.2f}%'.format(100.0*recalls[index_max_f2]))
 
     return {'P1': precisions[index_max_f1].item(),
             'R1': recalls[index_max_f1].item(),

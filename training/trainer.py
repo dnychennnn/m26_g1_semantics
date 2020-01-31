@@ -78,11 +78,11 @@ class Trainer:
                  stem_inference_kernel_size_peaks,
                  stem_inference_threshold_votes,
                  stem_inference_threshold_peaks,
-                 sugar_beet_threshold,
-                 weed_threshold,
+                 sugar_beet_thresholds,
+                 weed_thresholds,
                  tolerance_radius,
                  size_depedent_weight,
-                 stem_score_threshold,
+                 stem_score_thresholds,
                  **extra_arguments):
 
         self.architecture_name = architecture_name
@@ -98,11 +98,11 @@ class Trainer:
         self.target_width = target_width
         self.keypoint_radius = keypoint_radius
         self.tolerance_radius = tolerance_radius
-        self.sugar_beet_threshold = sugar_beet_threshold
-        self.weed_threshold = weed_threshold
+        self.sugar_beet_thresholds = sugar_beet_thresholds
+        self.weed_thresholds = weed_thresholds
         self.stem_inference_threshold_peaks = stem_inference_threshold_peaks
         self.size_depedent_weight = size_depedent_weight
-        self.stem_score_threshold = stem_score_threshold
+        self.stem_score_thresholds = stem_score_thresholds
 
         # init loss weights
         loss_norm = semantic_loss_weight+stem_loss_weight
@@ -506,7 +506,7 @@ class Trainer:
                             input_slice=input_batch[0],
                             semantic_output=semantic_output_batch[0],
                             semantic_target=semantic_target_batch[0],
-                            semantic_predicted=make_classification_map(semantic_output_batch, self.sugar_beet_threshold, self.weed_threshold)[0],
+                            semantic_predicted=make_classification_map(semantic_output_batch, self.sugar_beet_thresholds[0], self.weed_thresholds[0])[0],
                             stem_keypoint_output=stem_keypoint_output_batch[0],
                             stem_offset_output=stem_offset_output_batch[0],
                             stem_position_output=stem_position_output_batch[0],
@@ -514,11 +514,11 @@ class Trainer:
                             test_run=test_run)
 
             accumulated_confusion_matrix_val += compute_confusion_matrix(semantic_output_batch,
-                    semantic_target_batch, self.sugar_beet_threshold, self.weed_threshold)
+                    semantic_target_batch, self.sugar_beet_thresholds[0], self.weed_thresholds[0])
 
             # comute stem metrics
             confusion_matrix_stem_val, deviation_val = compute_stem_metrics(stem_position_output_batch,
-                    stem_position_target_list, tolerance_radius=self.tolerance_radius, stem_score_threshold=self.stem_score_threshold)
+                    stem_position_target_list, tolerance_radius=self.tolerance_radius, stem_score_threshold=self.stem_score_thresholds[0])
 
             accumulated_confusion_matrix_stem_val += confusion_matrix_stem_val
             accumulated_deviation_val += deviation_val
@@ -553,6 +553,8 @@ class Trainer:
         # make plot of class-wise precision-recall curve and compute average precision
         metrics_val = precision_recall_curve_and_average_precision(
             all_semantic_outputs, all_semantic_targets,
+            predefined_thresholds=[self.weed_thresholds, self.sugar_beet_thresholds], # to use predefined ones to evaluate on test split
+            # predefined_thresholds=None, # to choose the optimals ones using val split
             path=self.current_checkpoint_dir,
             filename=self.current_checkpoint_name+'_precision_recall')
 
@@ -561,6 +563,8 @@ class Trainer:
             all_stem_outputs,
             all_stem_targets,
             self.tolerance_radius,
+            predefined_thresholds=self.stem_score_thresholds, # to use predefined ones to evaluate on test split
+            # predefined_thresholds=None, # to choose the optimal ones using val split
             path=self.current_checkpoint_dir,
             filename=self.current_checkpoint_name+'_precision_recall')
 
@@ -592,7 +596,7 @@ class Trainer:
                                    filename=self.current_checkpoint_name+'_stem_val.yaml')
 
         print('  AP (sugar beet): {:.02f}%'.format(100.0*metrics_val['sugar_beet']['AP']))
-        print('  AP (weed)      : {:.02f}%'.format(100.0*metrics_val['sugar_beet']['AP']))
+        print('  AP (weed)      : {:.02f}%'.format(100.0*metrics_val['weed']['AP']))
         print('  AP (stems)     : {:.02f}%'.format(100.0*metrics_val_stems['AP']))
         print('  Mean deviation stems within {:.01f} px tolerance: {:.04f} px'.format(
             self.tolerance_radius, accumulated_deviation_val/(accumulated_confusion_matrix_stem_val[0, 0]+1e-6)))
