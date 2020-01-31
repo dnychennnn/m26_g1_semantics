@@ -2,6 +2,11 @@
 
 Semantic segmentation and stem detection for agricultural robotics using ROS.
 
+### Results
+
+Trained models and evaluation results (test set) are available here:
+[https://uni-bonn.sciebo.de/s/0eFLh4bsu7T9Aq4](https://uni-bonn.sciebo.de/s/0eFLh4bsu7T9Aq4)
+
 ### File structure
 
 ```
