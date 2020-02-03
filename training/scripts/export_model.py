@@ -1,6 +1,4 @@
 """Script to export model as .onnx file.
-
-Author: Jan Quakernack
 """
 import click
 from pathlib import Path

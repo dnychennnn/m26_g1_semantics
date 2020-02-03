@@ -553,8 +553,8 @@ class Trainer:
         # make plot of class-wise precision-recall curve and compute average precision
         metrics_val = precision_recall_curve_and_average_precision(
             all_semantic_outputs, all_semantic_targets,
-            predefined_thresholds=[self.weed_thresholds, self.sugar_beet_thresholds], # to use predefined ones to evaluate on test split
-            # predefined_thresholds=None, # to choose the optimals ones using val split
+            # predefined_thresholds=[self.weed_thresholds, self.sugar_beet_thresholds], # to use predefined ones to evaluate on test split
+            predefined_thresholds=None, # to choose the optimals ones using val split
             path=self.current_checkpoint_dir,
             filename=self.current_checkpoint_name+'_precision_recall')
 
@@ -563,8 +563,8 @@ class Trainer:
             all_stem_outputs,
             all_stem_targets,
             self.tolerance_radius,
-            predefined_thresholds=self.stem_score_thresholds, # to use predefined ones to evaluate on test split
-            # predefined_thresholds=None, # to choose the optimal ones using val split
+            # predefined_thresholds=self.stem_score_thresholds, # to use predefined ones to evaluate on test split
+            predefined_thresholds=None, # to choose the optimal ones using val split
             path=self.current_checkpoint_dir,
             filename=self.current_checkpoint_name+'_precision_recall')
 
@@ -607,8 +607,8 @@ class Trainer:
         predicted_weed_but_actual_beet = accumulated_confusion_matrix_val[2, 1]
         predicted_beet_but_actual_weed = accumulated_confusion_matrix_val[1, 2]
 
-        print("  Actual beet pixels predicted as weed: {:.02f}%".format(100.0*predicted_weed_but_actual_beet/actual_beet_total))
-        print("  Actual weed pixels predicted as beet: {:.02f}%".format(100.0*predicted_beet_but_actual_weed/actual_weed_total))
+        print("  Actual beet pixels predicted as weed: {:.02f}%".format(100.0*predicted_weed_but_actual_beet/(actual_beet_total+1e-6)))
+        print("  Actual weed pixels predicted as beet: {:.02f}%".format(100.0*predicted_beet_but_actual_weed/(actual_weed_total+1e-6)))
 
 
     def stem_positions_to_list(self, stem_position_target_batch, stem_count_target_batch):

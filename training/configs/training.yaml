@@ -4,14 +4,14 @@ learning_rate: 0.001
 num_epochs: 500
 
 # weighting of losses
-semantic_loss_weight: 10.0
+semantic_loss_weight: 100.0
 stem_loss_weight: 1.0
 stem_classification_loss_weight: 1.0
 stem_regression_loss_weight: 1.0
 
 # class weights for semantic segmentation
 weight_background: 1.0
-weight_weed: 20.0
+weight_weed: 15.0
 weight_sugar_beet: 5.0
 
 # class weights for stem keypoint detection

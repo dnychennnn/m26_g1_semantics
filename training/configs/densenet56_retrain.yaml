@@ -1,0 +1,35 @@
+architecture_name: 'densenet56_retrain'
+path_to_weights_file: ''
+
+batch_size: 1
+input_channels: 4
+input_height: 966
+input_width: 1296
+
+target_height: 322
+target_width: 432
+
+initial_conv_output_channels: 32
+initial_conv_stride: 3
+initial_conv_kernel_size: 7
+
+# 'shared': same decoder for semantic and stem features
+# 'separate': two different decoders
+decoder_option: 'separate'
+
+# only allowed to be different if decoder_option is 'separate'
+semantic_feature_channels: 64
+stem_feature_channels: 64
+
+# hardnet backbone specific
+num_conv_blocks_per_stage: [4, 8, 8, 4]
+output_channels_per_stage: [64, 128, 256, 512]
+growth_rate_per_stage: [16, 16, 32, 128]
+do_downsampling_per_stage: [True, True, True, False]
+provide_as_output_per_stage: [True, True, True, True]
+dropout_rate: 0.2
+
+# for maximum F1, F.5, F2 on val split
+sugar_beet_thresholds: [0.5, 0.7, 0.3]
+weed_thresholds: [0.5, 0.7, 0.3]
+stem_score_thresholds: [0.5, 0.7, 0.3]
