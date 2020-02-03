@@ -26,17 +26,6 @@ namespace igg {
 
 namespace fs = boost::filesystem;
 
-/*
-
-std::unique_ptr<Network> MakeNetwork(const NetworkParameters kNetworkParameters,
-                                     const SemanticLabelerParameters kSemanticLabelerParameters,
-                                     const StemExtractorParameters kStemExtractorParameters) {
-
-  return std::make_unique<TensorrtNetwork>(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
-
-                                     }
-*/
-
 CropDetection::CropDetection(ros::NodeHandle& node_handle,
                              const std::string& kRgbImageTopic,
                              const std::string& kNirImageTopic,
@@ -50,15 +39,17 @@ CropDetection::CropDetection(ros::NodeHandle& node_handle,
 
   ROS_INFO("Init crop detection node.");
 
+  PytorchNetwork my_network(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
+
   try {
     ROS_INFO("Attempt to init TensorRT network.");
-    //if (this->network_) {this->network_.reset(); this->network_ = nullptr;}
+    if (this->network_) {this->network_.reset(); this->network_ = nullptr;}
     this->network_ = std::make_unique<TensorrtNetwork>(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
     this->network_->Load((Network::ModelsDir()/(kArchitectureName+".onnx")).string(), false); // false as we do not enforce rebuilding the model
   } catch (const std::exception& kError) {
     ROS_WARN("Cannot init TensorRT network ('%s'). Trying Torch.", kError.what());
     try {
-      //if (this->network_) {this->network_.reset(); this->network_ = nullptr;}
+      if (this->network_) {this->network_.reset(); this->network_ = nullptr;}
       this->network_ = std::make_unique<PytorchNetwork>(kNetworkParameters, kSemanticLabelerParameters, kStemExtractorParameters);
       this->network_->Load((Network::ModelsDir()/(kArchitectureName+".pt")).string(), false);
     } catch (const std::exception& kError) {

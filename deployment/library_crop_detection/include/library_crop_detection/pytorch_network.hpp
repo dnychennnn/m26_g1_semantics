@@ -4,7 +4,6 @@
  /*
  * @file pytorch_network.hpp
  *
- * @author Yung-Yu Chen
  * @version 0.1
  */
 
@@ -72,8 +71,6 @@ private:
   #endif // TORCH_AVAILABLE
 
   bool is_loaded_ = false;
-
-  void* input_buffer_ = nullptr; // for input only, memory for results is provided by igg::NetworkInference
 };
 
 } // namespace igg

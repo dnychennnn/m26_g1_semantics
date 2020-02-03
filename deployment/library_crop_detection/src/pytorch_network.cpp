@@ -42,16 +42,9 @@ PytorchNetwork::PytorchNetwork(
     kInputHeight_{kNetworkParameters.input_height},
     kInputChannels_{kNetworkParameters.input_channels}{
   ASSERT_TORCH_AVAILABLE;
-  #ifdef TORCH_AVAILABLE
-  // Allocate buffer memory for network input
-  this->input_buffer_ = malloc(4*this->kInputWidth_*this->kInputHeight_*this->kInputChannels_); // 4 bytes per float
-  #endif // TORCH_AVAILABLE
 }
 
-PytorchNetwork::~PytorchNetwork() {
-  // Free buffer memory
-  if (this->input_buffer_) {free(this->input_buffer_);}
-}
+PytorchNetwork::~PytorchNetwork() {}
 
 void PytorchNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
   #ifdef TORCH_AVAILABLE
@@ -65,6 +58,9 @@ void PytorchNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
   StopWatch stop_watch;
   stop_watch.Start();
   #endif // DEBUG_MODE
+
+  // Allocate buffer memory for network input
+  void *input_buffer = malloc(4*this->kInputWidth_*this->kInputHeight_*this->kInputChannels_); // 4 bytes per float
 
   // resize to network input size
   cv::Mat input;
@@ -83,12 +79,12 @@ void PytorchNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
       for(int channel_index=0; channel_index<this->kInputChannels_; channel_index++) {
         pixel[channel_index] = (pixel[channel_index]/255.0-this->kMean_[channel_index])/this->kStd_[channel_index];
         const int kBufferIndex = this->kInputHeight_*this->kInputWidth_*channel_index+position[0]*this->kInputWidth_+position[1];
-        (static_cast<float*>(this->input_buffer_))[kBufferIndex] = pixel[channel_index];
+        (static_cast<float*>(input_buffer))[kBufferIndex] = pixel[channel_index];
       }
     }
   );
 
-  torch::Tensor input_tensor = torch::from_blob(this->input_buffer_, {
+  torch::Tensor input_tensor = torch::from_blob(input_buffer, {
       1, this->kInputChannels_, this->kInputHeight_, this->kInputWidth_}).to(torch::kFloat32);
   std::vector<torch::jit::IValue> inputs{input_tensor};
 
@@ -130,6 +126,8 @@ void PytorchNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
   // postprocessing
   this->kSemanticLabeler_.Infer(result);
   this->kStemExtractor_.Infer(result);
+
+  free(input_buffer);
 
   #ifdef DEBUG_MODE
   double inference_time = stop_watch.ElapsedTime();
@@ -177,6 +175,7 @@ void PytorchNetwork::Load(const std::string& kFilepath, const bool kForceRebuild
     this->is_loaded_ = false;
     throw std::runtime_error("Error loading model: "+std::string(kError.what()));
   }
+
   #endif // TORCH_AVAILABLE
 }
 

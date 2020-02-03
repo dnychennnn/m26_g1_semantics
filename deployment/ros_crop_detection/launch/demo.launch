@@ -15,7 +15,10 @@
 
   <!-- The bag file to play back. -->
   <arg name="path_to_bag_file"
-    default="$(env M26_G1_SEMANTICS_BAGS_DIR)flourish-rng_2015-06-29-14-43-43_1.bag" />
+    default="$(env M26_G1_SEMANTICS_BAGS_DIR)flourish-rng_2015-06-29-14-37-59_0.bag"/>
+
+  <!--<arg name="path_to_bag_file"
+    default="$(env M26_G1_SEMANTICS_BAGS_DIR)flourish-rng_2015-06-29-14-43-43_1.bag" />-->
 
   <!-- Bring up crop detection node. -->
   <!-- launch-prefix="valgrind" -->
@@ -30,16 +33,16 @@
   </node>
 
   <!-- Play back the data. -->
+  <!-- rate=5 -->
   <node pkg="rosbag"
         type="play"
         name="rosbag_play_node"
         output="screen"
-        args="$(arg path_to_bag_file) --delay=3 "/>
+        args="$(arg path_to_bag_file) --rate=2 --delay=3"/>
   <!-- Start with 3 seconds delay after advertising topics. -->
 
   <!-- Save output to files (folder .ros in home directory). -->
-  <!--
-  <node name="extract" pkg="image_view" type="extract_images" respawn="false" required="true" output="screen" cwd="ROS_HOME">
-    <remap from="image" to="crop_detection_node/network_output"/>
-  </node>-->
+  <!-- <node name="extract" pkg="image_view" type="extract_images" respawn="false" required="true" output="screen" cwd="ROS_HOME">
+    <remap from="image" to="/crop_detection_node/visualization"/>
+  </node> -->
 </launch>

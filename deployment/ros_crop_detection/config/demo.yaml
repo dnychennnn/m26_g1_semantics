@@ -14,6 +14,6 @@ stem_extraction_threshold_peaks: 0.1 # only pixels with accumulated votes larger
 architecture_name: "densenet56"
 
 # other architectures
-# architecture_name: "densenet56s"
-# architecture_name: "hardnet56"
-# architecture_name: "hardnet56s"
+#architecture_name: "densenet56s"
+#architecture_name: "hardnet56"
+#architecture_name: "hardnet56s"
