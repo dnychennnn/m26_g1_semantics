@@ -3,28 +3,28 @@
   <rosparam command="load" file="$(find ros_crop_detection)/config/demo.yaml" />
 
   <!-- Image topics to extract. -->
-  <arg name="rgb_image_topic"
-    default="/stereo_rgb/left/image_raw_sync" />
-
   <!--<arg name="rgb_image_topic"-->
-    <!--default="/camera/jai/rgb/image" />-->
+    <!--default="/stereo_rgb/left/image_raw_sync" />-->
 
-  <arg name="nir_image_topic"
-    default="/stereo_nir/left/image_raw_sync" />
+  <arg name="rgb_image_topic"
+    default="/camera/jai/rgb/image" />
 
   <!--<arg name="nir_image_topic"-->
-    <!--default="/camera/jai/nir/image" />-->
+    <!--default="/stereo_nir/left/image_raw_sync" />-->
+
+  <arg name="nir_image_topic"
+    default="/camera/jai/nir/image" />
 
   <!-- The model to use. Will look for a .onnx/.engine/.pt file with the same name. -->
   <arg name="path_to_model_file"
     default="$(env M26_G1_SEMANTICS_MODELS_DIR)densenet56" />
 
   <!-- The bag file to play back. -->
-  <arg name="path_to_bag_file"
-    default="$(env M26_G1_SEMANTICS_BAGS_DIR)flourish-rng_2015-06-29-14-37-59_0.bag"/>
-
   <!--<arg name="path_to_bag_file"-->
-    <!--default="$(env M26_G1_SEMANTICS_BAGS_DIR)bonirob_2016-05-06-09-56-31_0.bag"/>-->
+    <!--default="$(env M26_G1_SEMANTICS_BAGS_DIR)flourish-rng_2015-06-29-14-37-59_0.bag"/>-->
+
+  <arg name="path_to_bag_file"
+    default="$(env M26_G1_SEMANTICS_BAGS_DIR)bonirob_2016-05-06-09-56-31_0.bag"/>
 
   <!--<arg name="path_to_bag_file"
     default="$(env M26_G1_SEMANTICS_BAGS_DIR)flourish-rng_2015-06-29-14-43-43_1.bag" />-->
@@ -47,7 +47,7 @@
         type="play"
         name="rosbag_play_node"
         output="screen"
-        args="$(arg path_to_bag_file) --delay=3"/>
+        args="$(arg path_to_bag_file) --rate=2 --delay=3"/>
   <!-- Start with 3 seconds delay after advertising topics. -->
 
   <!-- Save output to files (folder .ros in home directory). -->
