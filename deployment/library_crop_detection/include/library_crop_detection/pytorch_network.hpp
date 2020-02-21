@@ -12,7 +12,6 @@
 #endif // TORCH_AVAILABLE
 
 #include "network.hpp"
-#include "opencv_stem_inference.hpp"
 
 namespace igg {
 
