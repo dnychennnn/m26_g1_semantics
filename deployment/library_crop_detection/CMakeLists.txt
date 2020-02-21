@@ -5,7 +5,11 @@ project(library_crop_detection)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(CMAKE_CUDA_STANDARD 11)
+if(NOT DEFINED CMAKE_CUDA_STANDARD)
+  set(CMAKE_CUDA_STANDARD 11)
+  set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+endif()
+
 
 ## Flags to explicitly enable/disable CUDA/TensorRT
 set(CUDA_ENABLED TRUE)
@@ -142,6 +146,7 @@ if (CUDA_AVAILABLE)
 
   # place for nvcc compiler flags
   set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS})
+
 else()
   message(STATUS "Build without CUDA.")
 endif(CUDA_AVAILABLE)
@@ -250,6 +255,11 @@ endif(TENSORRT_ONNX_PARSER_AVAILABLE)
 if(TORCH_AVAILABLE)
   target_link_libraries(${PROJECT_NAME} ${TORCH_LIBRARIES})
 endif(TORCH_AVAILABLE)
+
+if(CUDA_AVAILABLE)
+  cuda_add_library(stem_extractor_gpu_lib ${LIB_TYPE} src/stem_extractor_gpu.cu)
+  target_link_libraries(${PROJECT_NAME} stem_extractor_gpu_lib)
+endif(CUDA_AVAILABLE)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries

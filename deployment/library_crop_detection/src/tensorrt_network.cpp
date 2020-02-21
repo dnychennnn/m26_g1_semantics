@@ -46,7 +46,11 @@ TensorrtNetwork::TensorrtNetwork(
     mean_{kNetworkParameters.mean},
     std_{kNetworkParameters.std},
     kSemanticLabeler_{SemanticLabeler(kSemanticLabelerParameters)},
-    kStemExtractor_{StemExtractor(kStemExtractorParameters)} {
+    kStemExtractor_{StemExtractor(kStemExtractorParameters)}
+    #ifdef CUDA_AVAILABLE
+    , kStemExtractorGpu_{StemExtractorGpu(kStemExtractorParameters)}
+    #endif // CUDA_AVAILABLE
+{
   ASSERT_TENSORRT_AVAILABLE;
 }
 
@@ -117,6 +121,21 @@ void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
   HANDLE_ERROR(cudaEventCreate(&event_input_consumed));
   context->enqueueV2(&((this->device_buffers_)[this->input_binding_index_]), stream, &event_input_consumed); // version 2 is without batch size
 
+  #ifdef CUDA_AVAILABLE
+
+  HANDLE_ERROR(cudaStreamSynchronize(stream));
+
+  this->kStemExtractorGpu_.Infer(
+      this->device_buffers_[this->stem_keypoint_output_binding_index_],
+      this->device_buffers_[this->stem_offset_output_binding_index_],
+      this->stem_keypoint_output_height_,
+      this->stem_keypoint_output_width_,
+      result);
+
+  HANDLE_ERROR(cudaStreamSynchronize(stream));
+
+  #endif // CUDA_AVAILABLE
+
   // retrieve semantic class confidences
   for(int class_index=0; class_index<this->semantic_output_channels_; class_index++) {
     HANDLE_ERROR(cudaMemcpyAsync(result.ServeSemanticClassConfidenceBuffer(class_index, this->semantic_output_width_, this->semantic_output_height_),
@@ -152,7 +171,7 @@ void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
 
   // postprocessing
   this->kSemanticLabeler_.Infer(result);
-  this->kStemExtractor_.Infer(result);
+  //this->kStemExtractor_.Infer(result);
 
   #ifdef DEBUG_MODE
   double inference_time = stop_watch.ElapsedTime();

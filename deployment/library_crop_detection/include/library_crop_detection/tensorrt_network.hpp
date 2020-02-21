@@ -18,6 +18,7 @@
 #include "library_crop_detection/network.hpp"
 #include "library_crop_detection/semantic_labeler.hpp"
 #include "library_crop_detection/stem_extractor.hpp"
+#include "library_crop_detection/stem_extractor_gpu.hpp"
 
 namespace igg {
 
@@ -113,7 +114,12 @@ private:
   #endif // TENSORRT_AVAILABLE
 
   const SemanticLabeler kSemanticLabeler_;
+
   const StemExtractor kStemExtractor_;
+
+  #ifdef CUDA_AVAILABLE
+  const StemExtractorGpu kStemExtractorGpu_;
+  #endif // CUDA_AVAILABLE
 
   /*!
    * Loads and already buildt engine from file.
