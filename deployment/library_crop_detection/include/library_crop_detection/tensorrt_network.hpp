@@ -115,10 +115,10 @@ private:
 
   const SemanticLabeler kSemanticLabeler_;
 
-  const StemExtractor kStemExtractor_;
-
   #ifdef CUDA_AVAILABLE
   StemExtractorGpu stem_extractor_gpu_;
+  #else
+  const StemExtractor kStemExtractor_;
   #endif // CUDA_AVAILABLE
 
   /*!

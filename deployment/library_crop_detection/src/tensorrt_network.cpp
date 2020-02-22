@@ -46,9 +46,10 @@ TensorrtNetwork::TensorrtNetwork(
     mean_{kNetworkParameters.mean},
     std_{kNetworkParameters.std},
     kSemanticLabeler_{SemanticLabeler(kSemanticLabelerParameters)},
-    kStemExtractor_{StemExtractor(kStemExtractorParameters)}
     #ifdef CUDA_AVAILABLE
-    , stem_extractor_gpu_{StemExtractorGpu(kStemExtractorParameters)}
+    stem_extractor_gpu_{StemExtractorGpu(kStemExtractorParameters)}
+    #else
+    kStemExtractor_{StemExtractor(kStemExtractorParameters)}
     #endif // CUDA_AVAILABLE
 {
   ASSERT_TENSORRT_AVAILABLE;
@@ -123,6 +124,8 @@ void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
 
   #ifdef CUDA_AVAILABLE
 
+  // run gpu stem extractor
+
   HANDLE_ERROR(cudaStreamSynchronize(stream));
 
   this->stem_extractor_gpu_.Infer(
@@ -169,7 +172,11 @@ void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
 
   // postprocessing
   this->kSemanticLabeler_.Infer(result);
-  //this->kStemExtractor_.Infer(result);
+
+  #ifndef CUDA_AVAILABLE
+  // run cpu stem extractor
+  this->kStemExtractor_.Infer(result);
+  #endif // CUDA_AVAILABLE
 
   #ifdef DEBUG_MODE
   double inference_time = stop_watch.ElapsedTime();
@@ -265,6 +272,8 @@ void TensorrtNetwork::Load(const std::string& kFilepath, const bool kForceRebuil
   this->ReadBindingsAndAllocateBufferMemory();
 
   #ifdef CUDA_AVAILABLE
+
+  // bring parameters to gpu stem extractor
 
   // scaling to give stem positions relative to input size
   const float kScaling = static_cast<float>(this->input_height_)/static_cast<float>(this->stem_offset_output_height_);

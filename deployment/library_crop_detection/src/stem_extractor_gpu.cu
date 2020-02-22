@@ -71,9 +71,6 @@ void StemExtractorGpu::LoadAndAllocateBuffers(
   this->size_ = kHeight*kWidth;
   this->scaling_ = kScaling;
 
-  std::cout << this->height_ << "\n";
-  std::cout << this->width_ << "\n";
-
   cudaStream_t stream;
   HANDLE_ERROR(cudaStreamCreate(&(stream)));
 
