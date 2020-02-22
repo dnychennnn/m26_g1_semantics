@@ -46,7 +46,12 @@ TensorrtNetwork::TensorrtNetwork(
     mean_{kNetworkParameters.mean},
     std_{kNetworkParameters.std},
     kSemanticLabeler_{SemanticLabeler(kSemanticLabelerParameters)},
-    kStemExtractor_{StemExtractor(kStemExtractorParameters)} {
+    #ifdef CUDA_AVAILABLE
+    stem_extractor_gpu_{StemExtractorGpu(kStemExtractorParameters)}
+    #else
+    kStemExtractor_{StemExtractor(kStemExtractorParameters)}
+    #endif // CUDA_AVAILABLE
+{
   ASSERT_TENSORRT_AVAILABLE;
 }
 
@@ -117,6 +122,21 @@ void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
   HANDLE_ERROR(cudaEventCreate(&event_input_consumed));
   context->enqueueV2(&((this->device_buffers_)[this->input_binding_index_]), stream, &event_input_consumed); // version 2 is without batch size
 
+  #ifdef CUDA_AVAILABLE
+
+  // run gpu stem extractor
+
+  HANDLE_ERROR(cudaStreamSynchronize(stream));
+
+  this->stem_extractor_gpu_.Infer(
+      static_cast<float*>(this->device_buffers_[this->stem_keypoint_output_binding_index_]),
+      static_cast<float*>(this->device_buffers_[this->stem_offset_output_binding_index_]),
+      result);
+
+  HANDLE_ERROR(cudaStreamSynchronize(stream));
+
+  #endif // CUDA_AVAILABLE
+
   // retrieve semantic class confidences
   for(int class_index=0; class_index<this->semantic_output_channels_; class_index++) {
     HANDLE_ERROR(cudaMemcpyAsync(result.ServeSemanticClassConfidenceBuffer(class_index, this->semantic_output_width_, this->semantic_output_height_),
@@ -152,7 +172,11 @@ void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
 
   // postprocessing
   this->kSemanticLabeler_.Infer(result);
+
+  #ifndef CUDA_AVAILABLE
+  // run cpu stem extractor
   this->kStemExtractor_.Infer(result);
+  #endif // CUDA_AVAILABLE
 
   #ifdef DEBUG_MODE
   double inference_time = stop_watch.ElapsedTime();
@@ -244,7 +268,23 @@ void TensorrtNetwork::Load(const std::string& kFilepath, const bool kForceRebuil
       serialized_model->destroy();
     }
   }
+
   this->ReadBindingsAndAllocateBufferMemory();
+
+  #ifdef CUDA_AVAILABLE
+
+  // bring parameters to gpu stem extractor
+
+  // scaling to give stem positions relative to input size
+  const float kScaling = static_cast<float>(this->input_height_)/static_cast<float>(this->stem_offset_output_height_);
+
+  this->stem_extractor_gpu_.LoadAndAllocateBuffers(
+      this->stem_keypoint_output_height_,
+      this->stem_keypoint_output_width_,
+      kScaling);
+
+  #endif // CUDA_AVAILABLE
+
   #endif // TENSORRT_AVAILABLE
 }
 

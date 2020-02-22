@@ -21,6 +21,7 @@ public:
   void* ServeStemKeypointConfidenceBuffer(const int kHeight, const int kWidth);
   void* ServeStemOffsetXBuffer(const int kHeight, const int kWidth);
   void* ServeStemOffsetYBuffer(const int kHeight, const int kWidth);
+  void* ServeVotesBuffer(const int kHeight, const int kWidth);
 
   /*!
    * Get the offloaded outputs as cv::Mat.

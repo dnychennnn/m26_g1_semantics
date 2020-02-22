@@ -43,6 +43,11 @@ void* NetworkOutput::ServeStemOffsetYBuffer(const int kWidth, const int kHeight)
   return static_cast<void*>(this->stem_offset_y_.ptr());
 }
 
+void* NetworkOutput::ServeVotesBuffer(const int kHeight, const int kWidth) {
+  this->votes_.create(kHeight, kWidth, CV_32FC1);
+  return static_cast<void*>(this->votes_.ptr());
+}
+
 
 const cv::Mat& NetworkOutput::InputImage() const {
   return this->input_image_;
