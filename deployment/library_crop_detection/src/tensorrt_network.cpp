@@ -48,7 +48,7 @@ TensorrtNetwork::TensorrtNetwork(
     kSemanticLabeler_{SemanticLabeler(kSemanticLabelerParameters)},
     kStemExtractor_{StemExtractor(kStemExtractorParameters)}
     #ifdef CUDA_AVAILABLE
-    , kStemExtractorGpu_{StemExtractorGpu(kStemExtractorParameters)}
+    , stem_extractor_gpu_{StemExtractorGpu(kStemExtractorParameters)}
     #endif // CUDA_AVAILABLE
 {
   ASSERT_TENSORRT_AVAILABLE;
@@ -125,11 +125,9 @@ void TensorrtNetwork::Infer(NetworkOutput& result, const cv::Mat& kImage) {
 
   HANDLE_ERROR(cudaStreamSynchronize(stream));
 
-  this->kStemExtractorGpu_.Infer(
-      this->device_buffers_[this->stem_keypoint_output_binding_index_],
-      this->device_buffers_[this->stem_offset_output_binding_index_],
-      this->stem_keypoint_output_height_,
-      this->stem_keypoint_output_width_,
+  this->stem_extractor_gpu_.Infer(
+      static_cast<float*>(this->device_buffers_[this->stem_keypoint_output_binding_index_]),
+      static_cast<float*>(this->device_buffers_[this->stem_offset_output_binding_index_]),
       result);
 
   HANDLE_ERROR(cudaStreamSynchronize(stream));
@@ -263,7 +261,21 @@ void TensorrtNetwork::Load(const std::string& kFilepath, const bool kForceRebuil
       serialized_model->destroy();
     }
   }
+
   this->ReadBindingsAndAllocateBufferMemory();
+
+  #ifdef CUDA_AVAILABLE
+
+  // scaling to give stem positions relative to input size
+  const float kScaling = static_cast<float>(this->input_height_)/static_cast<float>(this->stem_offset_output_height_);
+
+  this->stem_extractor_gpu_.LoadAndAllocateBuffers(
+      this->stem_keypoint_output_height_,
+      this->stem_keypoint_output_width_,
+      kScaling);
+
+  #endif // CUDA_AVAILABLE
+
   #endif // TENSORRT_AVAILABLE
 }
 

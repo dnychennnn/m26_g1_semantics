@@ -210,6 +210,8 @@ include_directories(
   ${Boost_INCLUDE_DIRS}
 )
 
+message(WARNING, ${CUDA_INCLUDE_DIRS})
+
 if(CUDA_AVAILABLE)
 include_directories(${CUDA_INCLUDE_DIRS})
 endif(CUDA_AVAILABLE)

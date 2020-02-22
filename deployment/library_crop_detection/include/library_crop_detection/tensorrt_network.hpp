@@ -118,7 +118,7 @@ private:
   const StemExtractor kStemExtractor_;
 
   #ifdef CUDA_AVAILABLE
-  const StemExtractorGpu kStemExtractorGpu_;
+  StemExtractorGpu stem_extractor_gpu_;
   #endif // CUDA_AVAILABLE
 
   /*!
